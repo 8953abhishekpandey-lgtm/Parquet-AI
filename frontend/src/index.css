@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #171512;
+  background: #f7f7f5;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@layer components {
+  .panel {
+    @apply border border-graphite-200 bg-white shadow-panel;
+  }
+
+  .panel-header {
+    @apply border-b border-graphite-200 px-4 py-3;
+  }
+
+  .icon-button {
+    @apply inline-flex h-10 w-10 items-center justify-center border border-graphite-200 bg-white text-graphite-700 transition hover:border-graphite-500 hover:text-graphite-900 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .primary-button {
+    @apply inline-flex items-center justify-center gap-2 bg-signal-teal px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-graphite-200 disabled:text-graphite-500;
+  }
+
+  .secondary-button {
+    @apply inline-flex items-center justify-center gap-2 border border-graphite-200 bg-white px-4 py-2.5 text-sm font-semibold text-graphite-800 transition hover:border-graphite-500 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+}
+
