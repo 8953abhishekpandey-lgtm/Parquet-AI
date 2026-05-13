@@ -1,0 +1,2 @@
+"""Rule-based SQL generation."""
+
