@@ -18,16 +18,36 @@ export async function uploadParquet(file) {
   return parseResponse(response);
 }
 
-export async function uploadParquets(files) {
+export async function uploadParquets(files, onProgress) {
   const formData = new FormData();
   Array.from(files).forEach((file) => {
     formData.append("files", file);
   });
-  const response = await fetch(`${API_BASE_URL}/api/files/upload-multiple`, {
-    method: "POST",
-    body: formData,
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE_URL}/api/files/upload-multiple`);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && onProgress) {
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+    xhr.onload = () => {
+      let body = {};
+      try {
+        body = JSON.parse(xhr.responseText || "{}");
+      } catch {
+        body = {};
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(body);
+        return;
+      }
+      reject(new Error(body.detail || `Request failed with status ${xhr.status}`));
+    };
+    xhr.onerror = () => reject(new Error("Upload failed because the backend could not be reached."));
+    xhr.send(formData);
   });
-  return parseResponse(response);
 }
 
 export async function listDatasets() {

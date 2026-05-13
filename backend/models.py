@@ -71,6 +71,9 @@ class GeneratedSQL(BaseModel):
     selected_columns: list[str] = Field(default_factory=list)
     limit: int
     explanation: str
+    source: str = "local_rules"
+    validated: bool = False
+    retry_count: int = 0
 
 
 class QueryResponse(BaseModel):
@@ -82,3 +85,5 @@ class QueryResponse(BaseModel):
     columns: list[str]
     rows: list[dict[str, Any]]
     row_count: int
+    rag_context: dict[str, Any] = Field(default_factory=dict)
+    llm_usage: dict[str, Any] = Field(default_factory=dict)

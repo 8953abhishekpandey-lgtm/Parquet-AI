@@ -1,4 +1,4 @@
-import { Code2, Search } from "lucide-react";
+import { Code2, Search, ShieldCheck } from "lucide-react";
 
 export default function DebugPanel({ response }) {
   return (
@@ -14,7 +14,7 @@ export default function DebugPanel({ response }) {
         <div className="grid gap-4 p-4 lg:grid-cols-2">
           <div className="border border-graphite-200">
             <div className="border-b border-graphite-200 bg-graphite-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-graphite-700">
-              Retrieved Metadata
+              Retrieved Vectors
             </div>
             <div className="max-h-80 overflow-auto divide-y divide-graphite-100">
               {response.semantic_matches.map((match, index) => (
@@ -24,6 +24,9 @@ export default function DebugPanel({ response }) {
                       <div className="truncate text-sm font-semibold text-graphite-900">{match.column_name || match.kind}</div>
                       {match.payload?.filename ? (
                         <div className="mt-0.5 truncate text-[11px] font-semibold text-graphite-500">{match.payload.filename}</div>
+                      ) : null}
+                      {match.payload?.document_id ? (
+                        <div className="mt-0.5 truncate text-[11px] text-graphite-500">{match.payload.document_id}</div>
                       ) : null}
                     </div>
                     <div className="text-xs font-semibold text-signal-teal">{match.score.toFixed(3)}</div>
@@ -48,6 +51,12 @@ export default function DebugPanel({ response }) {
               </pre>
               <div className="grid gap-2 text-xs text-graphite-600 sm:grid-cols-2">
                 <div>
+                  <span className="font-semibold text-graphite-900">Source:</span> {response.generated_sql.source}
+                </div>
+                <div>
+                  <span className="font-semibold text-graphite-900">Validated:</span> {response.generated_sql.validated ? "yes" : "no"}
+                </div>
+                <div>
                   <span className="font-semibold text-graphite-900">Intent:</span> {response.generated_sql.intent}
                 </div>
                 <div>
@@ -64,8 +73,35 @@ export default function DebugPanel({ response }) {
               <p className="text-xs leading-5 text-graphite-600">{response.generated_sql.explanation}</p>
             </div>
           </div>
+
+          <div className="border border-graphite-200 lg:col-span-2">
+            <div className="flex items-center gap-2 border-b border-graphite-200 bg-graphite-50 px-3 py-2">
+              <ShieldCheck className="h-4 w-4 text-signal-teal" />
+              <div className="text-xs font-semibold uppercase tracking-wide text-graphite-700">Minimal External Context</div>
+            </div>
+            <div className="grid gap-4 p-3 text-xs text-graphite-700 md:grid-cols-[0.8fr_1.2fr]">
+              <div className="space-y-2">
+                <Info label="Claude enabled" value={response.llm_usage?.enabled ? "yes" : "no"} />
+                <Info label="Model" value={response.llm_usage?.model || "-"} />
+                <Info label="SQL fallback" value={response.llm_usage?.fallback_reason || "-"} />
+                <Info label="Rows sent for answer" value={String(response.rag_context?.result_preview_policy?.result_rows_sent_to_llm ?? 0)} />
+              </div>
+              <pre className="max-h-64 overflow-auto bg-graphite-50 p-3 text-[11px] leading-5 text-graphite-700">
+                {JSON.stringify(response.rag_context?.sql_generation_context_sent_to_llm || response.rag_context?.local_retrieval_context || {}, null, 2)}
+              </pre>
+            </div>
+          </div>
         </div>
       )}
     </section>
+  );
+}
+
+function Info({ label, value }) {
+  return (
+    <div className="flex items-start justify-between gap-3 border border-graphite-100 bg-white px-3 py-2">
+      <span className="font-semibold text-graphite-900">{label}</span>
+      <span className="text-right text-graphite-600">{value}</span>
+    </div>
   );
 }

@@ -11,7 +11,7 @@ app = FastAPI(
     title="Chat with Dynamic Parquet Files",
     description=(
         "Fully local AI-powered parquet analytics using FastAPI, DuckDB, "
-        "Spark, sentence-transformers, and Qdrant."
+        "Spark, sentence-transformers, Qdrant, and Claude for minimal-context reasoning."
     ),
     version="1.0.0",
 )
@@ -32,4 +32,3 @@ app.include_router(query.router)
 @app.on_event("startup")
 def startup() -> None:
     settings.ensure_directories()
-

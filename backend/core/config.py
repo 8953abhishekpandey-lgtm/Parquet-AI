@@ -1,16 +1,21 @@
 from functools import lru_cache
 from pathlib import Path
 
+from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env", override=False)
+
+
 class Settings(BaseSettings):
     app_name: str = "Chat with Dynamic Parquet Files"
-    project_root: Path = Path(__file__).resolve().parents[2]
-    upload_dir: Path = Field(default_factory=lambda: Path(__file__).resolve().parents[2] / "uploads")
+    project_root: Path = PROJECT_ROOT
+    upload_dir: Path = Field(default_factory=lambda: PROJECT_ROOT / "uploads")
     dataset_store_dir: Path = Field(
-        default_factory=lambda: Path(__file__).resolve().parents[1] / "storage" / "datasets"
+        default_factory=lambda: PROJECT_ROOT / "backend" / "storage" / "datasets"
     )
 
     qdrant_url: str = "http://localhost:6333"
@@ -30,6 +35,17 @@ class Settings(BaseSettings):
     query_row_limit: int = 100
     semantic_top_k: int = 12
     enable_spark_schema: bool = True
+
+    anthropic_api_key: str | None = None
+    anthropic_model: str = "claude-sonnet-4-6"
+    anthropic_enabled: bool = True
+    anthropic_max_tokens_sql: int = 1200
+    anthropic_max_tokens_answer: int = 700
+    anthropic_timeout_seconds: float = 30.0
+    anthropic_context_match_limit: int = 10
+    anthropic_result_row_limit: int = 12
+    anthropic_sample_value_limit: int = 5
+    sql_retry_attempts: int = 1
 
     allowed_origins: list[str] = [
         "http://localhost:5173",

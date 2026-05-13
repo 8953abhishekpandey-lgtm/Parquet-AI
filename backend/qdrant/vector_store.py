@@ -36,7 +36,8 @@ class QdrantVectorStore:
             except Exception as exc:
                 raise ConnectionError(
                     "Qdrant is not reachable. Use embedded mode with QDRANT_MODE=embedded "
-                    "or start server mode with: docker compose up -d qdrant"
+                    "or start server mode with: docker compose up -d qdrant. "
+                    f"Underlying error: {exc}"
                 ) from exc
         return QdrantVectorStore._shared_client
 

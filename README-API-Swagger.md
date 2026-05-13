@@ -38,9 +38,10 @@ Run from the project root:
 ```powershell
 cd D:\MCP-SETUP-TEST
 .\.venv\Scripts\Activate.ps1
-$env:QDRANT_MODE="embedded"
-uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
+
+Do not use `--reload` with embedded Qdrant. Reload mode can create extra Python processes and lock `backend/storage/qdrant`.
 
 If `.venv` does not exist yet:
 
@@ -49,8 +50,8 @@ cd D:\MCP-SETUP-TEST
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-pip install -r requirements.txt
-uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+python -m pip install -r requirements.txt
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
 ### Start Frontend
@@ -114,7 +115,139 @@ These are the app APIs shown in Swagger:
 | `POST` | `/api/chat/query` | Ask a natural language question about one dataset |
 | `POST` | `/api/chat/query-all` | Ask a natural language question across uploaded datasets |
 
-## 4. API Implementation Map
+## 4. Plain-English API Flow
+
+This section explains what each API is doing in simple words.
+
+### Big Picture
+
+The browser talks to your local FastAPI backend. The backend reads parquet files locally, creates local metadata and embeddings, stores those embeddings in local Qdrant, generates SQL, runs SQL locally in DuckDB, and returns results to the UI.
+
+Claude does not receive the full parquet file. Claude receives only a small context object: selected schema metadata, limited sample values, generated SQL context, and tiny result previews.
+
+### What The Uploaded File API Does
+
+`POST http://127.0.0.1:8000/api/files/upload`
+
+This uploads one parquet file from the browser to your local backend.
+
+Step by step:
+
+1. Browser sends the actual `.parquet` file to FastAPI.
+2. Backend saves the file under `uploads/`.
+3. DuckDB reads the file locally and finds columns, datatypes, row count, sample rows, and basic stats.
+4. Spark may also read the schema if Spark is enabled.
+5. Backend creates text metadata for columns and sample rows.
+6. Local sentence-transformers converts that metadata text into vectors like `[0.22, -0.13, 0.04, ...]`.
+7. Local Qdrant stores those vectors.
+8. Backend saves a dataset manifest with `dataset_id`, filename, schema, row count, sample rows, and metadata count.
+
+Important: the real parquet file goes to your local backend only. It is not sent to Claude.
+
+### What Each API Does
+
+| API | What you send | What it does locally | What it returns |
+|---|---|---|---|
+| `GET /health` | Nothing | Checks settings from `.env` | Backend status, Qdrant mode, Anthropic configured/not configured |
+| `POST /api/files/upload` | One parquet file | Saves file, profiles schema, creates embeddings, stores vectors in Qdrant | One `dataset` object |
+| `POST /api/files/upload-multiple` | Multiple parquet files | Runs the same upload/index flow for each file | `datasets` plus per-file `errors` |
+| `GET /api/datasets` | Nothing | Reads saved dataset manifests | List of uploaded datasets and schemas |
+| `GET /api/datasets/{dataset_id}/schema` | Dataset id | Reads one saved manifest | Full schema/profile for that dataset |
+| `DELETE /api/datasets/{dataset_id}` | Dataset id | Deletes saved manifest/file and best-effort Qdrant vectors | Empty `204` response |
+| `POST /api/chat/query` | `dataset_id`, question, limit | Searches Qdrant for that dataset, generates SQL, runs DuckDB | Answer, SQL, rows, debug context |
+| `POST /api/chat/query-all` | Question, optional dataset ids, limit | Searches Qdrant across datasets, can infer joins, generates SQL, runs DuckDB | Answer, SQL, rows, debug context |
+
+### What The Big `rag_context` JSON Means
+
+The JSON you pasted is the debug context used for retrieval and SQL generation. It is meant to prove what was selected and what was allowed.
+
+`security_policy`
+
+Tells you the privacy rules for this request:
+
+- `raw_parquet_sent_to_llm: false` means the actual parquet file was not sent to Claude.
+- `full_dataset_sent_to_llm: false` means all rows were not sent to Claude.
+- `embeddings_location: local sentence-transformers` means embeddings were created on your machine.
+- `vector_db_location: local Qdrant` means vectors were stored/searched locally.
+- `sql_execution_location: local DuckDB` means SQL ran locally.
+- `llm_receives` tells you Claude only receives small metadata/context, not the full data.
+
+`question`
+
+The user question, for example:
+
+```text
+show all data present
+```
+
+`requested_limit`
+
+The maximum number of rows requested. In your example, `100` means the SQL should return at most 100 rows.
+
+`allowed_relations`
+
+These are the uploaded parquet files that the SQL generator is allowed to use. Each file is given a safe temporary table name, like:
+
+```text
+Equipment.parquet -> t2_equipment
+Consumer.parquet  -> t6_consumer
+```
+
+`relevant_columns`
+
+These are columns the local vector search thinks may matter for the question. It includes:
+
+- file name
+- relation/table name
+- column name
+- datatype
+- a few sample values
+- basic stats such as distinct count and top values
+
+`retrieved_matches`
+
+These are the raw Qdrant search results. The `score` shows how close the question embedding was to each metadata embedding. Higher score means more semantically relevant.
+
+This is not actual row data. It is retrieved metadata text.
+
+`limited_sample_rows`
+
+Small row examples, if the backend decided they were useful. In your pasted JSON it is empty, so no sample rows were included in that context.
+
+`local_candidate_sql`
+
+This is the SQL the backend generated as a candidate query. In your example, the question was broad: `show all data present`. So the SQL joins the uploaded datasets and returns `LIMIT 100` rows.
+
+`context_counts`
+
+Simple counts for the debug context:
+
+- how many Qdrant matches were retrieved
+- how many relevant columns were selected
+- how many sample rows were included
+
+### What Goes To Claude And What Does Not
+
+Sent to Claude:
+
+- user question
+- allowed relation names
+- selected column names
+- datatypes
+- limited sample values
+- basic column stats
+- local candidate SQL
+- tiny result preview for final explanation
+
+Not sent to Claude:
+
+- full parquet files
+- all table rows
+- local Qdrant database
+- raw embedding vectors like `[0.22, -0.13, ...]`
+- local file paths for direct reading
+
+## 5. API Implementation Map
 
 | API | Backend file | Main backend function | Frontend usage |
 |---|---|---|---|
@@ -126,7 +259,7 @@ These are the app APIs shown in Swagger:
 | `POST /api/chat/query` | `backend/api/routes/query.py` | `query_dataset()` | `askQuestion()` in `frontend/src/services/api.js` |
 | `POST /api/chat/query-all` | `backend/api/routes/query.py` | `query_all_datasets()` | `askAllDatasets()` in `frontend/src/services/api.js` |
 
-## 5. API Details
+## 6. API Details
 
 ## `GET /health`
 
@@ -869,7 +1002,7 @@ Invoke-RestMethod `
   -Body $BODY
 ```
 
-## 6. End-to-End Swagger Test
+## 7. End-to-End Swagger Test
 
 This is the recommended local test flow.
 
@@ -878,8 +1011,7 @@ This is the recommended local test flow.
 ```powershell
 cd D:\MCP-SETUP-TEST
 .\.venv\Scripts\Activate.ps1
-$env:QDRANT_MODE="embedded"
-uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
 ### Step 2: Open Swagger
@@ -1034,7 +1166,7 @@ For related parquet files, try:
 }
 ```
 
-## 7. End-to-End PowerShell Test
+## 8. End-to-End PowerShell Test
 
 This tests the same API flow without Swagger UI.
 
@@ -1116,7 +1248,7 @@ Invoke-RestMethod `
   -Body $BODY
 ```
 
-## 8. How API Responses Connect to the UI
+## 9. How API Responses Connect to the UI
 
 ### Upload Responses
 
@@ -1173,7 +1305,7 @@ The UI maps them to:
 | `columns` | `ResultsTable.jsx` |
 | `rows` | `ResultsTable.jsx` |
 
-## 9. Health Checks
+## 10. Health Checks
 
 ### Backend Health
 
@@ -1243,7 +1375,7 @@ or:
 Invoke-RestMethod http://localhost:6333/collections
 ```
 
-## 10. Common Swagger/API Errors
+## 11. Common Swagger/API Errors
 
 ### `404 Not Found`
 
@@ -1330,9 +1462,13 @@ Qdrant server mode is selected but Qdrant is not running, or embedded storage ha
 Fix for embedded:
 
 ```powershell
-$env:QDRANT_MODE="embedded"
-uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+cd D:\MCP-SETUP-TEST
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
+
+Do not use `--reload` with embedded Qdrant. If the installed Qdrant client is too old for the local `backend/storage/qdrant` format, reinstalling `requirements.txt` updates it.
 
 Fix for server mode:
 
@@ -1376,7 +1512,7 @@ Debug steps:
 How many records are in this file?
 ```
 
-## 11. Recommended API Testing Order
+## 12. Recommended API Testing Order
 
 Always test in this order:
 
@@ -1391,15 +1527,14 @@ Always test in this order:
 
 This order makes debugging easier because each API depends on the previous one.
 
-## 12. Quick Command Checklist
+## 13. Quick Command Checklist
 
 Backend:
 
 ```powershell
 cd D:\MCP-SETUP-TEST
 .\.venv\Scripts\Activate.ps1
-$env:QDRANT_MODE="embedded"
-uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
 Frontend:
@@ -1428,3 +1563,4 @@ Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue | Select-Obje
 Get-NetTCPConnection -LocalPort 5173 -ErrorAction SilentlyContinue | Select-Object OwningProcess
 Stop-Process -Id <PID1>,<PID2> -Force
 ```
+

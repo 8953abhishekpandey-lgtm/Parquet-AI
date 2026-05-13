@@ -1,7 +1,7 @@
 import { FileUp, Loader2, UploadCloud } from "lucide-react";
 import { useRef, useState } from "react";
 
-export default function UploadDropzone({ onUpload, loading, error }) {
+export default function UploadDropzone({ onUpload, loading, progress = 0, error }) {
   const inputRef = useRef(null);
   const [isDragging, setDragging] = useState(false);
   const [selectedSummary, setSelectedSummary] = useState("");
@@ -51,6 +51,22 @@ export default function UploadDropzone({ onUpload, loading, error }) {
         </span>
         <span className="mt-2 text-xs text-graphite-500">Multiple files are indexed as separate dynamic datasets.</span>
       </button>
+
+      {loading ? (
+        <div className="mx-4 mb-4">
+          <div className="flex items-center justify-between text-xs font-semibold text-graphite-600">
+            <span>Uploading and indexing locally</span>
+            <span>{progress}%</span>
+          </div>
+          <div className="mt-2 h-2 bg-graphite-100">
+            <div className="h-full bg-signal-teal transition-all" style={{ width: `${Math.max(8, progress)}%` }} />
+          </div>
+        </div>
+      ) : selectedSummary ? (
+        <div className="mx-4 mb-4 border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
+          Upload accepted. Schema, embeddings, and Qdrant indexing run on the backend.
+        </div>
+      ) : null}
 
       <input
         ref={inputRef}

@@ -23,7 +23,7 @@ export default function ChatPanel({ dataset, datasetCount, queryScope, onScopeCh
     <section className="panel">
       <div className="panel-header">
         <h2 className="text-sm font-semibold text-graphite-900">AI Query Chat</h2>
-        <p className="mt-1 text-xs text-graphite-500">Natural language is matched against local Qdrant metadata vectors.</p>
+        <p className="mt-1 text-xs text-graphite-500">Questions are retrieved locally, then Claude receives only the minimal matched context.</p>
       </div>
 
       <div className="space-y-4 p-4">

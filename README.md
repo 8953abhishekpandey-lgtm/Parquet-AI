@@ -1,261 +1,287 @@
-# Chat with Dynamic Parquet Files
+# Parquet AI Chat
 
-A fully local AI-powered parquet analytics application. Users upload one or many parquet files from the UI, the backend detects each schema dynamically, creates local semantic embeddings with `all-MiniLM-L6-v2`, stores metadata vectors in local Qdrant, generates SQL with schema-aware rules, runs it in DuckDB, and returns an explainable analytics response.
+This project lets you upload parquet files and ask questions about them in plain English.
 
-No OpenAI APIs, no Ollama, no cloud LLMs, and no paid AI services are required.
+The app keeps your files and data local. It uses:
 
-## Architecture
+- FastAPI for the backend API
+- React for the browser UI
+- DuckDB to read and query parquet files
+- Qdrant to store searchable schema metadata
+- Sentence Transformers for local embeddings
+- Anthropic Claude only for SQL reasoning and short answers
 
-```mermaid
-flowchart LR
-  UI[React + Tailwind UI] --> API[FastAPI]
-  API --> Uploads[uploads/]
-  API --> Duck[DuckDB profiler and SQL executor]
-  API --> Spark[Spark schema reader]
-  API --> Meta[Semantic metadata builder]
-  Meta --> Embed[Local sentence-transformers all-MiniLM-L6-v2]
-  Embed --> Qdrant[(Local Qdrant)]
-  UI --> Chat[Question]
-  Chat --> API
-  API --> Embed
-  Embed --> Qdrant
-  Qdrant --> Rules[Rule-based SQL generator]
-  Rules --> Duck
-  Duck --> Results[JSON results + template answer]
-  Results --> UI
-```
+Raw parquet files are not sent to Claude. Claude only receives small schema/context snippets and small result previews.
 
-## Folder Structure
+## Project Folders
 
 ```text
-backend/
-  api/routes/          FastAPI endpoints
-  core/                settings
-  duckdb/              parquet profiling and SQL execution
-  embeddings/          local sentence-transformers wrapper
-  metadata/            dynamic semantic metadata generation
-  qdrant/              local vector database integration
-  retrieval/           question-to-metadata semantic search
-  services/            ingestion/query orchestration
-  spark/               optional local Spark schema reader
-  sql_generation/      rule-based dynamic SQL generator
-frontend/
-  src/components/      enterprise UI panels
-  src/pages/           analytics workbench
-  src/services/        API client
-uploads/               user-uploaded parquet files
+backend/       FastAPI app and data-query logic
+frontend/      React UI
+uploads/       uploaded parquet files, kept local
+.env           your real local settings and API key, ignored by git
+.env.example   safe template, no real secrets
+requirements.txt
 ```
 
-## What It Does
+Do not put real API keys in `.env.example`.
 
-- Uploads one or many `.parquet` files from the browser.
-- Saves uploads locally under `uploads/`.
-- Detects columns, datatypes, row count, sample rows, and profile stats dynamically.
-- Uses DuckDB as the primary local execution engine.
-- Uses Spark locally for schema validation when Java/Spark are available.
-- Generates semantic metadata from column names, normalized labels, sample values, datatypes, and profile stats.
-- Creates embeddings locally with `sentence-transformers` and `all-MiniLM-L6-v2`.
-- Stores semantic metadata in local Qdrant.
-- Matches natural language questions to relevant uploaded-file metadata.
-- Generates SQL dynamically without hardcoded schemas.
-- Executes SQL against the uploaded parquet file with DuckDB.
-- Shows semantic matches, generated SQL, matched columns, and result rows in the UI.
+## First Time Setup
 
-## Prerequisites
-
-- Python 3.11 or 3.12 recommended
-- Node.js 20+
-- Docker Desktop if you prefer standalone Qdrant server mode
-- Java 8/11/17 if you want Spark schema inspection enabled
-
-The embedding model may download once from Hugging Face the first time it is used. After that, it runs from the local model cache. To run in a locked-down environment, pre-download the model and set `EMBEDDING_MODEL` to the local model folder.
-
-## PowerShell Setup
-
-Run from the project root:
+Run these commands from the project root:
 
 ```powershell
+cd D:\MCP-SETUP-TEST
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
-By default, the backend uses Qdrant embedded local mode and stores vectors under `backend/storage/qdrant/`, so Docker is not required for development.
+If you see this error:
 
-Start the backend:
-
-```powershell
-uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+```text
+No module named uvicorn
 ```
 
-Start the frontend in a second PowerShell window:
+run this again while the `.venv` is active:
 
 ```powershell
-cd frontend
+python -m pip install -r requirements.txt
+```
+
+`uvicorn` is already listed in `requirements.txt`; the error means the packages were not installed into the active virtual environment.
+
+## Environment File
+
+Create or update `.env` in the project root:
+
+```env
+ANTHROPIC_API_KEY=your_real_key_here
+ANTHROPIC_MODEL=claude-sonnet-4-6
+ANTHROPIC_ENABLED=true
+
+QDRANT_MODE=embedded
+QDRANT_COLLECTION=parquet_semantic_metadata
+
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+ENABLE_SPARK_SCHEMA=true
+SAMPLE_ROWS=20
+QUERY_ROW_LIMIT=100
+ANTHROPIC_CONTEXT_MATCH_LIMIT=10
+ANTHROPIC_RESULT_ROW_LIMIT=12
+```
+
+Use `.env` for real values. Use `.env.example` only as a template.
+
+## Start The Backend
+
+Run from the project root, not from inside `backend/`:
+
+```powershell
+cd D:\MCP-SETUP-TEST
+.\.venv\Scripts\Activate.ps1
+python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
+```
+
+For local embedded Qdrant, avoid `--reload`. Reload can create extra Python processes and lock Qdrant storage.
+
+Backend URLs:
+
+- API health: `http://127.0.0.1:8000/health`
+- API docs: `http://127.0.0.1:8000/docs`
+
+## Start The Frontend
+
+Open a second PowerShell window:
+
+```powershell
+cd D:\MCP-SETUP-TEST\frontend
 npm install
 npm run dev
 ```
 
-Open:
+Then open:
 
-- UI: `http://localhost:5173`
-- Swagger docs: `http://localhost:8000/docs`
-- Health check: `http://localhost:8000/health`
-- Qdrant dashboard: `http://localhost:6333/dashboard` when using server mode
-
-## Qdrant Docker
-
-`docker-compose.yml` starts Qdrant locally on port `6333` and persists vectors under `qdrant_storage/`. Use this when you want the standalone Qdrant service instead of embedded local mode.
-
-```powershell
-$env:QDRANT_MODE="server"
-docker compose up -d qdrant
-docker compose logs -f qdrant
-docker compose down
+```text
+http://localhost:5173
 ```
 
-## API Documentation
+## Normal Workflow
 
-### `GET /health`
+1. Start backend.
+2. Start frontend.
+3. Upload one or more `.parquet` files.
+4. Ask a question in the chat panel.
+5. Check the debug panel if the answer looks wrong.
 
-Returns service status, embedding model, and Qdrant URL.
+The backend builds metadata from your parquet files, stores searchable vectors locally, asks Claude to generate safe SQL, validates the SQL, runs it in DuckDB, and returns the answer.
 
-### `POST /api/files/upload`
+## Stop An Existing Backend
 
-Single-file multipart upload endpoint.
+If port `8000` is already busy or Qdrant is locked, stop the old backend:
 
-Form field:
+```powershell
+$connections = Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue |
+  Where-Object { $_.State -eq "Listen" }
 
-- `file`: any `.parquet` file
+$processIds = $connections | Select-Object -ExpandProperty OwningProcess -Unique
 
-Returns:
-
-- dataset id
-- filename
-- row count
-- columns and datatypes
-- sample rows
-- Spark schema availability
-- semantic metadata count
-
-### `POST /api/files/upload-multiple`
-
-Multi-file multipart upload endpoint used by the UI.
-
-Form field:
-
-- `files`: one or more `.parquet` files
-
-Returns:
-
-- `datasets`: successfully indexed parquet datasets
-- `errors`: per-file processing errors, if any
-
-### `GET /api/datasets`
-
-Lists uploaded datasets with their detected schema manifests.
-
-### `GET /api/datasets/{dataset_id}/schema`
-
-Returns the full manifest for one uploaded parquet file.
-
-### `POST /api/chat/query`
-
-Request:
-
-```json
-{
-  "dataset_id": "uploaded_dataset_id",
-  "question": "Which area has highest electricity usage?",
-  "limit": 100
+foreach ($processId in $processIds) {
+  Stop-Process -Id $processId -Force
 }
 ```
 
-Returns:
+Then start it again:
 
-- template answer
-- Qdrant semantic matches
-- generated SQL
-- selected metric/grouping columns
-- DuckDB result rows
+```powershell
+python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
+```
 
-### `POST /api/chat/query-all`
+More detail is in `README-503-Troubleshooting.md`.
 
-Queries across all uploaded parquet datasets, or a supplied subset of dataset ids.
+## Common Errors
 
-The backend:
+### No module named uvicorn
 
-- searches Qdrant metadata across selected datasets
-- creates DuckDB views for every selected parquet
-- infers joins from matching columns and foreign-key style names such as `EquipmentId`, `DeviceLocationId`, `ConsumerID`, `Material_ID`, and `HES_ID`
-- generates joined SQL, grouped SQL, trend SQL, outlier SQL, or per-dataset row counts
-- returns generated SQL and result rows
+Cause: dependencies are not installed in the active `.venv`.
 
-## Dynamic SQL Examples
+Fix:
 
-Question:
+```powershell
+cd D:\MCP-SETUP-TEST
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+### 503 Service Unavailable
+
+Most likely cause: Qdrant is not reachable, embedded Qdrant is locked by another backend process, or the installed `qdrant-client` version is too old for the existing local Qdrant storage.
+
+Fix:
+
+1. Stop the old backend on port `8000`.
+2. Start the backend again without `--reload`.
+3. Check health:
+
+```powershell
+Invoke-RestMethod -Uri http://127.0.0.1:8000/health -Method Get |
+  ConvertTo-Json -Depth 5
+```
+
+Expected:
+
+```json
+{
+  "qdrant_mode": "embedded",
+  "anthropic_configured": true
+}
+```
+
+If it still fails, reinstall dependencies so the Qdrant client version matches `requirements.txt`:
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+### Anthropic is not configured
+
+Cause: the key is missing from `.env`, or the backend was started before `.env` was updated.
+
+Fix:
+
+1. Put `ANTHROPIC_API_KEY=...` in `.env`.
+2. Restart the backend.
+3. Check `/health`.
+
+### Hugging Face token warning
+
+This warning is not fatal:
 
 ```text
-Which area has highest electricity usage?
+You are sending unauthenticated requests to the HF Hub
 ```
 
-The system embeds the question, retrieves relevant metadata, chooses numeric and grouping columns from the uploaded schema, and generates SQL shaped like:
+The app can still work. Add `HF_TOKEN` only if downloads are rate-limited.
 
-```sql
-SELECT
-  "Region" AS "Region",
-  MAX("Power_Consumption") AS metric_value
-FROM dataset
-WHERE "Power_Consumption" IS NOT NULL AND "Region" IS NOT NULL
-GROUP BY "Region"
-ORDER BY metric_value DESC
-LIMIT 100
+### Spark or Java warning
+
+Spark schema reading is optional. If Spark or Java fails, DuckDB can still inspect and query parquet files.
+
+To disable Spark schema checks:
+
+```env
+ENABLE_SPARK_SCHEMA=false
 ```
 
-Question:
+Then restart the backend.
 
-```text
-Show regions with abnormal consumption.
-```
+## Qdrant Modes
 
-The rule engine generates a local z-score query against the selected metric column.
-
-## Environment Variables
-
-Create `.env` in the project root if needed:
+Default local mode:
 
 ```env
 QDRANT_MODE=embedded
-QDRANT_URL=http://localhost:6333
-QDRANT_COLLECTION=parquet_semantic_metadata
-EMBEDDING_MODEL=all-MiniLM-L6-v2
-ENABLE_SPARK_SCHEMA=true
 ```
 
-For offline model usage:
+Embedded mode is easiest. It does not need Docker, but only one backend process should use it at a time.
+
+Server mode:
+
+```powershell
+docker compose up -d qdrant
+```
+
+Then set:
 
 ```env
-EMBEDDING_MODEL=D:\models\all-MiniLM-L6-v2
+QDRANT_MODE=server
+QDRANT_URL=http://localhost:6333
 ```
 
-## Demo Flow
+Restart the backend after changing Qdrant mode.
 
-1. Start the backend and frontend. Start Docker Qdrant first only if using `QDRANT_MODE=server`.
-2. Upload any parquet file from the UI.
-3. Confirm row count, schema, datatypes, and sample rows.
-4. Ask a natural language question.
-5. Review semantic matches in the debug panel.
-6. Review generated SQL.
-7. Confirm DuckDB results in the table.
+## Clean Project Notes
 
-## Notes
+Safe to delete:
 
-- There are no sample parquet generation scripts.
-- There are no predefined parquet filenames.
-- There are no hardcoded table schemas.
-- The SQL generator is intentionally rule-based for explainability and local operation.
-- Future LLM integration can be added behind the same `sql_generation` interface without changing upload, metadata, retrieval, or execution flows.
-- For a file-by-file implementation guide and troubleshooting playbook, read `README-Guide.md`.
-- For Swagger endpoint details and API testing steps, read `README-API-Swagger.md`.
-# Parquet-AI
+- `__pycache__/`
+- `.pytest_cache/`
+- `*.log`
+- `frontend/dist/`
+- accidental nested virtual environments like `backend/.venv/`
+
+Do not delete unless you really want to reset local data:
+
+- `.env`
+- `uploads/`
+- `backend/storage/`
+- root `.venv/`
+- `frontend/node_modules/`
+
+## Quick Health Test
+
+```powershell
+Invoke-RestMethod -Uri http://127.0.0.1:8000/health -Method Get |
+  ConvertTo-Json -Depth 5
+```
+
+If that works, test a query:
+
+```powershell
+$body = @{
+  question = "show me the first rows"
+  limit = 5
+} | ConvertTo-Json
+
+Invoke-WebRequest `
+  -Uri http://127.0.0.1:8000/api/chat/query-all `
+  -Method Post `
+  -Body $body `
+  -ContentType "application/json" `
+  -SkipHttpErrorCheck
+```
+
+## Security Reminder
+
+`.env` is ignored by git and should contain the real API key. `.env.example` should never contain real keys.

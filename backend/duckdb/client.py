@@ -29,6 +29,24 @@ NUMERIC_MARKERS = (
     "REAL",
 )
 DATE_MARKERS = ("DATE", "TIME", "TIMESTAMP")
+FORBIDDEN_SQL_KEYWORDS = re.compile(
+    r"\b("
+    r"insert|update|delete|drop|alter|create|copy|attach|detach|pragma|call|"
+    r"export|import|install|load|vacuum|checkpoint|grant|revoke"
+    r")\b",
+    flags=re.IGNORECASE,
+)
+FORBIDDEN_FILE_FUNCTIONS = re.compile(
+    r"\b("
+    r"read_parquet|parquet_scan|read_csv|read_json|read_text|read_blob|glob|"
+    r"httpfs|sqlite_scan|postgres_scan|mysql_scan"
+    r")\s*\(",
+    flags=re.IGNORECASE,
+)
+FORBIDDEN_FILE_REFERENCES = re.compile(
+    r"(['\"][^'\"]*\.(?:parquet|csv|json|db|sqlite|duckdb)['\"]|https?://|s3://|file://)",
+    flags=re.IGNORECASE,
+)
 
 
 def quote_identifier(name: str) -> str:
@@ -146,9 +164,7 @@ class DuckDBAnalytics:
         }
 
     def execute_sql(self, parquet_path: str | Path, sql: str, row_limit: int) -> tuple[list[str], list[dict[str, Any]]]:
-        cleaned_sql = sql.strip().rstrip(";")
-        if not cleaned_sql.lower().startswith(("select", "with")):
-            raise ValueError("Generated SQL must be a SELECT or WITH query.")
+        cleaned_sql = self._validate_readonly_sql(sql)
 
         with self._connect() as conn:
             self._create_view(conn, parquet_path)
@@ -163,9 +179,7 @@ class DuckDBAnalytics:
         sql: str,
         row_limit: int,
     ) -> tuple[list[str], list[dict[str, Any]]]:
-        cleaned_sql = sql.strip().rstrip(";")
-        if not cleaned_sql.lower().startswith(("select", "with")):
-            raise ValueError("Generated SQL must be a SELECT or WITH query.")
+        cleaned_sql = self._validate_readonly_sql(sql)
 
         with self._connect() as conn:
             for relation_name, parquet_path in relation_paths.items():
@@ -179,6 +193,42 @@ class DuckDBAnalytics:
             df = conn.execute(limited_sql).fetchdf()
 
         return list(df.columns), dataframe_to_records(df)
+
+    def validate_sql(self, parquet_path: str | Path, sql: str) -> str:
+        cleaned_sql = self._validate_readonly_sql(sql)
+        with self._connect() as conn:
+            self._create_view(conn, parquet_path)
+            conn.execute(f"EXPLAIN SELECT * FROM ({cleaned_sql}) AS generated_result LIMIT 0")
+        return cleaned_sql
+
+    def validate_sql_many(self, relation_paths: dict[str, str | Path], sql: str) -> str:
+        cleaned_sql = self._validate_readonly_sql(sql)
+        with self._connect() as conn:
+            for relation_name, parquet_path in relation_paths.items():
+                path_literal = quote_literal(str(parquet_path))
+                relation_ref = quote_identifier(relation_name)
+                conn.execute(
+                    f"CREATE OR REPLACE VIEW {relation_ref} AS "
+                    f"SELECT * FROM read_parquet({path_literal})"
+                )
+            conn.execute(f"EXPLAIN SELECT * FROM ({cleaned_sql}) AS generated_result LIMIT 0")
+        return cleaned_sql
+
+    def _validate_readonly_sql(self, sql: str) -> str:
+        cleaned_sql = sql.strip().rstrip(";")
+        if not cleaned_sql:
+            raise ValueError("Generated SQL cannot be empty.")
+        if ";" in cleaned_sql:
+            raise ValueError("Generated SQL must contain exactly one SELECT or WITH statement.")
+        if not cleaned_sql.lower().startswith(("select", "with")):
+            raise ValueError("Generated SQL must be a SELECT or WITH query.")
+        if FORBIDDEN_SQL_KEYWORDS.search(cleaned_sql):
+            raise ValueError("Generated SQL contains a forbidden write, DDL, or administrative keyword.")
+        if FORBIDDEN_FILE_FUNCTIONS.search(cleaned_sql):
+            raise ValueError("Generated SQL cannot call file-reading or external scan functions.")
+        if FORBIDDEN_FILE_REFERENCES.search(cleaned_sql):
+            raise ValueError("Generated SQL cannot reference raw files, paths, URLs, or object storage.")
+        return cleaned_sql
 
     def _sample_values(self, conn: duckdb.DuckDBPyConnection, column_name: str) -> list[Any]:
         column = quote_identifier(column_name)

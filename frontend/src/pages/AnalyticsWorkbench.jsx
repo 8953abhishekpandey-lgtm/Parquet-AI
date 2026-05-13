@@ -15,6 +15,7 @@ export default function AnalyticsWorkbench() {
   const [selectedDataset, setSelectedDataset] = useState(null);
   const [queryResponse, setQueryResponse] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [querying, setQuerying] = useState(false);
   const [queryScope, setQueryScope] = useState("selected");
   const [error, setError] = useState("");
@@ -34,9 +35,10 @@ export default function AnalyticsWorkbench() {
   async function handleUpload(files) {
     setError("");
     setUploading(true);
+    setUploadProgress(0);
     setQueryResponse(null);
     try {
-      const response = await uploadParquets(files);
+      const response = await uploadParquets(files, setUploadProgress);
       if (response.datasets.length) {
         setSelectedDataset(response.datasets[0]);
       }
@@ -49,6 +51,7 @@ export default function AnalyticsWorkbench() {
       setError(err.message);
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   }
 
@@ -107,13 +110,14 @@ export default function AnalyticsWorkbench() {
               </div>
               <div>
                 <h1 className="text-xl font-semibold tracking-normal text-graphite-900">Chat with Dynamic Parquet Files</h1>
-                <p className="mt-1 text-sm text-graphite-500">Local semantic retrieval, Qdrant vectors, rule-based SQL, DuckDB execution.</p>
+                <p className="mt-1 text-sm text-graphite-500">Local RAG retrieval and DuckDB execution with minimal-context Claude reasoning.</p>
               </div>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <StatusPill tone="success">No cloud LLM</StatusPill>
+            <StatusPill tone="success">Raw parquet stays local</StatusPill>
             <StatusPill>Local embeddings</StatusPill>
+            <StatusPill>Local Qdrant</StatusPill>
             <StatusPill>Dynamic schema</StatusPill>
           </div>
         </div>
@@ -128,7 +132,7 @@ export default function AnalyticsWorkbench() {
 
         <div className="grid gap-4 lg:grid-cols-[20rem_minmax(0,1fr)]">
           <aside className="space-y-4">
-            <UploadDropzone onUpload={handleUpload} loading={uploading} error="" />
+            <UploadDropzone onUpload={handleUpload} loading={uploading} progress={uploadProgress} error="" />
             <DatasetSelector
               datasets={datasets}
               selectedId={selectedDataset?.dataset_id}
@@ -155,6 +159,7 @@ export default function AnalyticsWorkbench() {
                 <PipelineStep label="Schema detection" active={Boolean(selectedDataset)} />
                 <PipelineStep label="Semantic metadata" active={Boolean(selectedDataset?.metadata_count)} />
                 <PipelineStep label="Qdrant retrieval" active={Boolean(queryResponse)} />
+                <PipelineStep label="Minimal Claude context" active={Boolean(queryResponse?.rag_context?.sql_generation_context_sent_to_llm)} />
                 <PipelineStep label="DuckDB SQL" active={Boolean(queryResponse)} />
               </div>
             </section>
