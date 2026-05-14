@@ -7,7 +7,6 @@ from backend.services.pipeline import AnalyticsPipeline
 router = APIRouter(prefix="/api", tags=["files"])
 pipeline = AnalyticsPipeline()
 
-
 @router.post("/files/upload", response_model=UploadResponse)
 async def upload_parquet(file: UploadFile = File(...)) -> UploadResponse:
     try:
