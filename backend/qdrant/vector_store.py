@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import atexit
+import logging
 import uuid
 from typing import Any
 
@@ -9,6 +10,8 @@ from qdrant_client.http import models as qmodels
 
 from backend.core.config import get_settings
 from backend.models import SemanticMatch
+
+logger = logging.getLogger(__name__)
 
 
 class QdrantVectorStore:
@@ -60,9 +63,39 @@ class QdrantVectorStore:
                 )
             return
 
+        # Create collection with HNSW tuning and cosine distance
         self.client.create_collection(
             collection_name=collection,
-            vectors_config=qmodels.VectorParams(size=vector_size, distance=qmodels.Distance.COSINE),
+            vectors_config=qmodels.VectorParams(
+                size=vector_size,
+                distance=qmodels.Distance.COSINE,
+            ),
+            hnsw_config=qmodels.HnswConfigDiff(
+                m=16,
+                ef_construct=200,
+            ),
+        )
+
+        # Create payload indexes for filtered retrieval
+        for field_name, field_type in [
+            ("filename", qmodels.PayloadSchemaType.KEYWORD),
+            ("column_name", qmodels.PayloadSchemaType.KEYWORD),
+            ("datatype", qmodels.PayloadSchemaType.KEYWORD),
+            ("dataset_id", qmodels.PayloadSchemaType.KEYWORD),
+            ("kind", qmodels.PayloadSchemaType.KEYWORD),
+        ]:
+            try:
+                self.client.create_payload_index(
+                    collection_name=collection,
+                    field_name=field_name,
+                    field_schema=field_type,
+                )
+            except Exception:
+                pass  # index may already exist
+
+        logger.info(
+            "Created Qdrant collection '%s' with HNSW(m=16, ef_construct=200) and payload indexes",
+            collection,
         )
 
     def replace_dataset_documents(self, dataset_id: str, documents: list[dict[str, Any]], vectors: list[list[float]]) -> None:
@@ -95,35 +128,47 @@ class QdrantVectorStore:
             wait=True,
         )
 
-    def search(self, dataset_id: str, query_vector: list[float], limit: int) -> list[SemanticMatch]:
+    def search(
+        self,
+        dataset_id: str,
+        query_vector: list[float],
+        limit: int,
+        score_threshold: float | None = None,
+    ) -> list[SemanticMatch]:
         query_filter = self._dataset_filter(dataset_id)
-        return self._search_with_filter(query_vector, limit, query_filter)
+        return self._search_with_filter(query_vector, limit, query_filter, score_threshold)
 
     def search_many(
         self,
         query_vector: list[float],
         limit: int,
         dataset_ids: list[str] | None = None,
+        score_threshold: float | None = None,
     ) -> list[SemanticMatch]:
         query_filter = self._dataset_filter_many(dataset_ids) if dataset_ids else None
-        return self._search_with_filter(query_vector, limit, query_filter)
+        return self._search_with_filter(query_vector, limit, query_filter, score_threshold)
 
     def _search_with_filter(
         self,
         query_vector: list[float],
         limit: int,
         query_filter: qmodels.Filter | None,
+        score_threshold: float | None = None,
     ) -> list[SemanticMatch]:
         collection = self.settings.qdrant_collection
 
+        search_kwargs: dict[str, Any] = {
+            "collection_name": collection,
+            "query_vector": query_vector,
+            "query_filter": query_filter,
+            "limit": limit,
+            "with_payload": True,
+        }
+        if score_threshold is not None:
+            search_kwargs["score_threshold"] = score_threshold
+
         if hasattr(self.client, "search"):
-            hits = self.client.search(
-                collection_name=collection,
-                query_vector=query_vector,
-                query_filter=query_filter,
-                limit=limit,
-                with_payload=True,
-            )
+            hits = self.client.search(**search_kwargs)
         else:
             result = self.client.query_points(
                 collection_name=collection,
@@ -169,3 +214,11 @@ class QdrantVectorStore:
                 )
             ]
         )
+
+    def is_connected(self) -> bool:
+        """Check if Qdrant is reachable (used by health endpoint)."""
+        try:
+            self.client.get_collections()
+            return True
+        except Exception:
+            return False

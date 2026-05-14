@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 import logging
 
@@ -74,6 +75,8 @@ class AnalyticsPipeline:
         if not question:
             raise ValueError("Question cannot be empty.")
 
+        t_start = time.perf_counter()
+
         manifest = self.files.load_manifest(request.dataset_id)
         parquet_path = Path(manifest.stored_path)
         if not parquet_path.exists():
@@ -117,16 +120,38 @@ class AnalyticsPipeline:
         try:
             columns, rows = self.duckdb.execute_sql(parquet_path, plan.sql, plan.limit)
         except Exception as sql_exc:
-            logger.warning("SQL execution failed (%s), retrying with rule-based SQL", sql_exc)
-            # If Claude's SQL fails, fall back to rule-based SQL
-            plan = self.sql_generator.generate(
-                question=question,
-                manifest=manifest,
-                matches=matches,
-                limit=min(request.limit, self.settings.query_row_limit),
-                exact=getattr(request, "exact", False),
-            )
-            columns, rows = self.duckdb.execute_sql(parquet_path, plan.sql, plan.limit)
+            logger.warning("SQL execution failed (%s), attempting Claude fix", sql_exc)
+            # Retry: send error back to Claude for a one-shot fix
+            if self.claude.available:
+                try:
+                    fixed_plan = self.claude.fix_sql_error(
+                        original_sql=plan.sql,
+                        error_message=str(sql_exc),
+                        limit=plan.limit,
+                    )
+                    columns, rows = self.duckdb.execute_sql(parquet_path, fixed_plan.sql, fixed_plan.limit)
+                    plan = fixed_plan
+                    logger.info("Claude SQL fix succeeded: %s", plan.sql[:100])
+                except Exception as fix_exc:
+                    logger.warning("Claude SQL fix also failed (%s), falling back to rule-based", fix_exc)
+                    plan = self.sql_generator.generate(
+                        question=question,
+                        manifest=manifest,
+                        matches=matches,
+                        limit=min(request.limit, self.settings.query_row_limit),
+                        exact=getattr(request, "exact", False),
+                    )
+                    columns, rows = self.duckdb.execute_sql(parquet_path, plan.sql, plan.limit)
+            else:
+                # No Claude — fall back to rule-based SQL
+                plan = self.sql_generator.generate(
+                    question=question,
+                    manifest=manifest,
+                    matches=matches,
+                    limit=min(request.limit, self.settings.query_row_limit),
+                    exact=getattr(request, "exact", False),
+                )
+                columns, rows = self.duckdb.execute_sql(parquet_path, plan.sql, plan.limit)
 
         # Step 4: Generate answer — try Claude, fallback to template
         answer = self.response_builder.build(plan, rows)
@@ -145,6 +170,8 @@ class AnalyticsPipeline:
             except Exception as exc:
                 logger.warning("Claude answer generation failed: %s", exc)
 
+        query_time_ms = round((time.perf_counter() - t_start) * 1000, 1)
+
         return QueryResponse(
             dataset_id=manifest.dataset_id,
             question=question,
@@ -155,6 +182,7 @@ class AnalyticsPipeline:
             columns=columns,
             rows=rows,
             row_count=len(rows),
+            query_time_ms=query_time_ms,
             security_audit=security_audit,
         )
 
@@ -162,6 +190,8 @@ class AnalyticsPipeline:
         question = request.question.strip()
         if not question:
             raise ValueError("Question cannot be empty.")
+
+        t_start = time.perf_counter()
 
         if request.dataset_ids:
             manifests = [self.files.load_manifest(dataset_id) for dataset_id in request.dataset_ids]
@@ -223,16 +253,36 @@ class AnalyticsPipeline:
         try:
             columns, rows = self.duckdb.execute_sql_many(relation_paths, plan.sql, plan.limit)
         except Exception as sql_exc:
-            logger.warning("Multi-table SQL execution failed (%s), retrying with rule-based", sql_exc)
-            plan = self.multi_sql_generator.generate(
-                question=question,
-                manifests=manifests,
-                matches=matches,
-                relation_map=relation_map,
-                limit=min(request.limit, self.settings.query_row_limit),
-                exact=getattr(request, "exact", False),
-            )
-            columns, rows = self.duckdb.execute_sql_many(relation_paths, plan.sql, plan.limit)
+            logger.warning("Multi-table SQL execution failed (%s), attempting Claude fix", sql_exc)
+            if self.claude.available:
+                try:
+                    fixed_plan = self.claude.fix_sql_error(
+                        original_sql=plan.sql,
+                        error_message=str(sql_exc),
+                        limit=plan.limit,
+                    )
+                    columns, rows = self.duckdb.execute_sql_many(relation_paths, fixed_plan.sql, fixed_plan.limit)
+                    plan = fixed_plan
+                except Exception:
+                    plan = self.multi_sql_generator.generate(
+                        question=question,
+                        manifests=manifests,
+                        matches=matches,
+                        relation_map=relation_map,
+                        limit=min(request.limit, self.settings.query_row_limit),
+                        exact=getattr(request, "exact", False),
+                    )
+                    columns, rows = self.duckdb.execute_sql_many(relation_paths, plan.sql, plan.limit)
+            else:
+                plan = self.multi_sql_generator.generate(
+                    question=question,
+                    manifests=manifests,
+                    matches=matches,
+                    relation_map=relation_map,
+                    limit=min(request.limit, self.settings.query_row_limit),
+                    exact=getattr(request, "exact", False),
+                )
+                columns, rows = self.duckdb.execute_sql_many(relation_paths, plan.sql, plan.limit)
 
         # Step 4: Generate answer
         answer = self.response_builder.build(plan, rows)
@@ -251,6 +301,8 @@ class AnalyticsPipeline:
             except Exception as exc:
                 logger.warning("Claude answer generation failed: %s", exc)
 
+        query_time_ms = round((time.perf_counter() - t_start) * 1000, 1)
+
         return QueryResponse(
             dataset_id="all",
             question=question,
@@ -261,6 +313,7 @@ class AnalyticsPipeline:
             columns=columns,
             rows=rows,
             row_count=len(rows),
+            query_time_ms=query_time_ms,
             security_audit=security_audit,
         )
 

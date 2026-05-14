@@ -6,6 +6,7 @@ from pathlib import Path
 
 from backend.duckdb.client import is_datetime_dtype, is_numeric_dtype, quote_identifier, quote_literal
 from backend.models import ColumnProfile, DatasetManifest, GeneratedSQL, SemanticMatch
+from backend.sql_generation.rules import _limit_clause
 
 
 @dataclass(frozen=True)
@@ -101,7 +102,7 @@ class MultiTableSQLGenerator:
                 if id_value
                 else ""
             )
-            sql = f"SELECT\n  {select_list}\n{from_clause}{where_clause}\nLIMIT {int(limit)}"
+            sql = f"SELECT\n  {select_list}\n{from_clause}{where_clause}" + _limit_clause(limit)
             return GeneratedSQL(
                 sql=sql,
                 intent="exact_preview",
@@ -448,7 +449,7 @@ class MultiTableSQLGenerator:
         from_clause = self._from_clause(tables, joins, aliases)
         dimension_expr = self._column_expr(dimension, aliases)
 
-        sql = f"""
+        sql = (f"""
 SELECT
   {dimension_expr} AS {quote_identifier(dimension.label)},
   COUNT(*) AS record_count
@@ -456,8 +457,7 @@ SELECT
 WHERE {dimension_expr} IS NOT NULL
 GROUP BY {dimension_expr}
 ORDER BY record_count DESC
-LIMIT {int(limit)}
-""".strip()
+""" + _limit_clause(limit)).strip()
 
         return GeneratedSQL(
             sql=sql,
@@ -485,7 +485,7 @@ LIMIT {int(limit)}
         metric_expr = self._column_expr(metric, aliases)
         dimension_expr = self._column_expr(dimension, aliases)
 
-        sql = f"""
+        sql = (f"""
 SELECT
   {dimension_expr} AS {quote_identifier(dimension.label)},
   {aggregation}({metric_expr}) AS metric_value
@@ -493,8 +493,7 @@ SELECT
 WHERE {metric_expr} IS NOT NULL AND {dimension_expr} IS NOT NULL
 GROUP BY {dimension_expr}
 ORDER BY metric_value DESC
-LIMIT {int(limit)}
-""".strip()
+""" + _limit_clause(limit)).strip()
 
         return GeneratedSQL(
             sql=sql,
@@ -563,7 +562,7 @@ WHERE {metric_expr} IS NOT NULL
             groups.append(dimension.label)
             selected.append(dimension.label)
 
-        sql = f"""
+        sql = (f"""
 SELECT
   DATE_TRUNC('{bucket}', {time_expr}) AS period{dimension_select},
   {aggregation}({metric_expr}) AS metric_value
@@ -571,8 +570,7 @@ SELECT
 WHERE {time_expr} IS NOT NULL AND {metric_expr} IS NOT NULL
 GROUP BY period{dimension_group}
 ORDER BY period{dimension_order}
-LIMIT {int(limit)}
-""".strip()
+""" + _limit_clause(limit)).strip()
 
         return GeneratedSQL(
             sql=sql,
@@ -616,7 +614,7 @@ LIMIT {int(limit)}
         scored_select = ",\n    ".join(select_items)
         scored_from = f"  {base_from}\n  CROSS JOIN stats"
 
-        sql = f"""
+        sql = (f"""
 WITH stats AS (
   SELECT
     AVG({metric_expr}) AS mean_value,
@@ -638,8 +636,7 @@ SELECT *
 FROM scored
 WHERE z_score >= 2
 ORDER BY z_score DESC
-LIMIT {int(limit)}
-""".strip()
+""" + _limit_clause(limit)).strip()
 
         return GeneratedSQL(
             sql=sql,
@@ -679,13 +676,12 @@ LIMIT {int(limit)}
             for ref in selected_refs
         )
         order_clause = self._order_clause(question, selected_refs, aliases, order_metric, order_direction)
-        sql = f"""
+        sql = (f"""
 SELECT
   {select_list}
 {from_clause}
 {order_clause}
-LIMIT {int(limit)}
-""".strip()
+""" + _limit_clause(limit)).strip()
 
         return GeneratedSQL(
             sql=sql,

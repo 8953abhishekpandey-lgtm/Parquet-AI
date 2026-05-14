@@ -152,8 +152,12 @@ class DuckDBAnalytics:
 
         with self._connect() as conn:
             self._create_view(conn, parquet_path)
-            limited_sql = f"SELECT * FROM ({cleaned_sql}) AS generated_result LIMIT {int(row_limit)}"
-            df = conn.execute(limited_sql).fetchdf()
+            if row_limit >= 999_999_999:
+                # No outer LIMIT — return all rows
+                final_sql = cleaned_sql
+            else:
+                final_sql = f"SELECT * FROM ({cleaned_sql}) AS generated_result LIMIT {int(row_limit)}"
+            df = conn.execute(final_sql).fetchdf()
 
         return list(df.columns), dataframe_to_records(df)
 
@@ -175,8 +179,11 @@ class DuckDBAnalytics:
                     f"CREATE OR REPLACE VIEW {relation_ref} AS "
                     f"SELECT * FROM read_parquet({path_literal})"
                 )
-            limited_sql = f"SELECT * FROM ({cleaned_sql}) AS generated_result LIMIT {int(row_limit)}"
-            df = conn.execute(limited_sql).fetchdf()
+            if row_limit >= 999_999_999:
+                final_sql = cleaned_sql
+            else:
+                final_sql = f"SELECT * FROM ({cleaned_sql}) AS generated_result LIMIT {int(row_limit)}"
+            df = conn.execute(final_sql).fetchdf()
 
         return list(df.columns), dataframe_to_records(df)
 

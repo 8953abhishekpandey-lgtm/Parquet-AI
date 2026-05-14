@@ -26,15 +26,20 @@ class Settings(BaseSettings):
     anthropic_max_tokens: int = 1024
     enable_claude_reasoning: bool = True
 
-    # default embedding model (keep small to match existing stored vectors)
-    embedding_model: str = "all-MiniLM-L6-v2"
+    # Upgraded embedding model — BAAI/bge-base-en-v1.5 (768d, cosine)
+    embedding_model: str = "BAAI/bge-base-en-v1.5"
     embedding_batch_size: int = 32
-    vector_size: int = 384
+    vector_size: int = 768
 
     sample_rows: int = 20
     profile_top_values: int = 8
-    query_row_limit: int = 100
-    semantic_top_k: int = 12
+    
+    @property
+    def query_row_limit(self) -> int:
+        return 999_999_999
+    semantic_top_k: int = 15
+    score_threshold: float = 0.35
+    context_max_tokens: int = 1500
     enable_spark_schema: bool = True
 
     allowed_origins: list[str] = [
@@ -42,6 +47,9 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://192.168.1.66:5174",
+        "http://192.168.1.12:5173",
+        "http://192.168.1.12:3000",
     ]
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")

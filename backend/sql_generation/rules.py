@@ -5,6 +5,15 @@ import re
 from backend.duckdb.client import is_datetime_dtype, is_numeric_dtype, quote_identifier, quote_literal
 from backend.models import ColumnProfile, DatasetManifest, GeneratedSQL, SemanticMatch
 
+UNLIMITED = 999_999_999
+
+
+def _limit_clause(limit: int) -> str:
+    """Return a LIMIT clause only when a finite limit is requested."""
+    if limit >= UNLIMITED:
+        return ""
+    return f"\nLIMIT {int(limit)}"
+
 
 class RuleBasedSQLGenerator:
     def generate(
@@ -40,7 +49,7 @@ class RuleBasedSQLGenerator:
                     where_clause = f"WHERE CAST({literal_col} AS VARCHAR) = {quote_literal(id_value)}"
 
             selected_names = [column.name for column in manifest.columns]
-            sql = f"SELECT * FROM dataset {where_clause} LIMIT {int(limit)}".strip()
+            sql = f"SELECT * FROM dataset {where_clause}{_limit_clause(limit)}".strip()
             return GeneratedSQL(
                 sql=sql,
                 intent="exact_preview",
@@ -175,7 +184,7 @@ class RuleBasedSQLGenerator:
         metric_ref = quote_identifier(metric.name)
         if dimension:
             dimension_ref = quote_identifier(dimension.name)
-            sql = f"""
+            sql = (f"""
 SELECT
   {dimension_ref} AS {quote_identifier(dimension.name)},
   {aggregation}({metric_ref}) AS metric_value
@@ -183,8 +192,7 @@ FROM dataset
 WHERE {metric_ref} IS NOT NULL AND {dimension_ref} IS NOT NULL
 GROUP BY {dimension_ref}
 ORDER BY metric_value {direction}
-LIMIT {int(limit)}
-""".strip()
+""" + _limit_clause(limit)).strip()
             return GeneratedSQL(
                 sql=sql,
                 intent=f"{label}_by_dimension",
@@ -253,7 +261,7 @@ WHERE {metric_ref} IS NOT NULL
 
         metric_ref = quote_identifier(metric.name)
         dimension_ref = quote_identifier(dimension.name)
-        sql = f"""
+        sql = (f"""
 SELECT
   {dimension_ref} AS {quote_identifier(dimension.name)},
   {aggregation}({metric_ref}) AS metric_value
@@ -261,8 +269,7 @@ FROM dataset
 WHERE {metric_ref} IS NOT NULL AND {dimension_ref} IS NOT NULL
 GROUP BY {dimension_ref}
 ORDER BY metric_value DESC
-LIMIT {int(limit)}
-""".strip()
+""" + _limit_clause(limit)).strip()
         return GeneratedSQL(
             sql=sql,
             intent=f"{label}_by_dimension",
@@ -312,7 +319,7 @@ LIMIT {int(limit)}
             group_fields.append(dimension.name)
             selected.append(dimension.name)
 
-        sql = f"""
+        sql = (f"""
 SELECT
   DATE_TRUNC('{bucket}', {time_ref}) AS period{dimension_select},
   {aggregation}({metric_ref}) AS metric_value
@@ -320,8 +327,7 @@ FROM dataset
 WHERE {time_ref} IS NOT NULL AND {metric_ref} IS NOT NULL
 GROUP BY period{dimension_group}
 ORDER BY period{dimension_order}
-LIMIT {int(limit)}
-""".strip()
+""" + _limit_clause(limit)).strip()
         return GeneratedSQL(
             sql=sql,
             intent=f"{bucket}_trend",
@@ -360,7 +366,7 @@ LIMIT {int(limit)}
             select_prefix += ",\n  "
             selected_columns = [column.name for column in display_columns] + [metric.name]
 
-        sql = f"""
+        sql = (f"""
 WITH stats AS (
   SELECT AVG({metric_ref}) AS mean_value, STDDEV_POP({metric_ref}) AS std_value
   FROM dataset
@@ -382,8 +388,7 @@ SELECT
 FROM scored
 WHERE z_score >= 2
 ORDER BY z_score DESC
-LIMIT {int(limit)}
-""".strip()
+""" + _limit_clause(limit)).strip()
         return GeneratedSQL(
             sql=sql,
             intent="outlier_detection",
@@ -398,7 +403,7 @@ LIMIT {int(limit)}
     def _count_sql(self, dimension: ColumnProfile | None, limit: int) -> GeneratedSQL:
         if dimension:
             dimension_ref = quote_identifier(dimension.name)
-            sql = f"""
+            sql = (f"""
 SELECT
   {dimension_ref} AS {quote_identifier(dimension.name)},
   COUNT(*) AS record_count
@@ -406,8 +411,7 @@ FROM dataset
 WHERE {dimension_ref} IS NOT NULL
 GROUP BY {dimension_ref}
 ORDER BY record_count DESC
-LIMIT {int(limit)}
-""".strip()
+""" + _limit_clause(limit)).strip()
             return GeneratedSQL(
                 sql=sql,
                 intent="count_by_dimension",
@@ -436,12 +440,11 @@ LIMIT {int(limit)}
         if not selected:
             selected = [column.name for column in columns[:8]]
         select_list = ",\n  ".join(f"{quote_identifier(name)} AS {quote_identifier(name)}" for name in selected)
-        sql = f"""
+        sql = (f"""
 SELECT
   {select_list}
 FROM dataset
-LIMIT {int(limit)}
-""".strip()
+""" + _limit_clause(limit)).strip()
         return GeneratedSQL(
             sql=sql,
             intent="preview",

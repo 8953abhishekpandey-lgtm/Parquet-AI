@@ -40,7 +40,8 @@ export async function getDatasetSchema(datasetId) {
   return parseResponse(response);
 }
 
-export async function askQuestion({ datasetId, question, limit = 100, exact = false }) {
+export async function askQuestion({ datasetId, question, limit, exact = false }) {
+  const t0 = performance.now();
   const response = await fetch(`${API_BASE_URL}/api/chat/query`, {
     method: "POST",
     headers: {
@@ -49,14 +50,17 @@ export async function askQuestion({ datasetId, question, limit = 100, exact = fa
     body: JSON.stringify({
       dataset_id: datasetId,
       question,
-      limit,
+      ...(limit != null && { limit }),
       exact,
     }),
   });
-  return parseResponse(response);
+  const data = await parseResponse(response);
+  data._client_time_ms = Math.round(performance.now() - t0);
+  return data;
 }
 
-export async function askAllDatasets({ question, datasetIds = null, limit = 100, exact = false }) {
+export async function askAllDatasets({ question, datasetIds = null, limit, exact = false }) {
+  const t0 = performance.now();
   const response = await fetch(`${API_BASE_URL}/api/chat/query-all`, {
     method: "POST",
     headers: {
@@ -65,11 +69,13 @@ export async function askAllDatasets({ question, datasetIds = null, limit = 100,
     body: JSON.stringify({
       question,
       dataset_ids: datasetIds,
-      limit,
+      ...(limit != null && { limit }),
       exact,
     }),
   });
-  return parseResponse(response);
+  const data = await parseResponse(response);
+  data._client_time_ms = Math.round(performance.now() - t0);
+  return data;
 }
 
 export async function deleteDataset(datasetId) {
@@ -81,4 +87,13 @@ export async function deleteDataset(datasetId) {
     throw new Error(body.detail || `Request failed with status ${response.status}`);
   }
   return null;
+}
+
+export async function checkHealth() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/health`);
+    return await response.json();
+  } catch {
+    return { status: "unreachable", services: { qdrant: false, duckdb: false, claude: false } };
+  }
 }

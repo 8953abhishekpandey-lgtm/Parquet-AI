@@ -1,5 +1,5 @@
-import { Loader2, SendHorizonal, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { Check, Copy, Loader2, SendHorizonal, Sparkles, User } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
 
 const SUGGESTIONS = [
   "Which category has the highest value?",
@@ -9,18 +9,48 @@ const SUGGESTIONS = [
   "Compare monthly trends.",
 ];
 
-export default function ChatPanel({ dataset, datasetCount, queryScope, onScopeChange, onAsk, loading, answer, aiReasoning }) {
+export default function ChatPanel({ dataset, datasetCount, queryScope, onScopeChange, onAsk, loading, answer, aiReasoning, queryResponse }) {
   const [question, setQuestion] = useState("");
   const [exact, setExact] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const messagesEndRef = useRef(null);
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
+
+  // When a new answer arrives, add to message history
+  useEffect(() => {
+    if (answer && messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg.role === "user" && !messages.some((m) => m.role === "ai" && m.timestamp === lastMsg.timestamp)) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "ai",
+            text: answer,
+            timestamp: new Date().toISOString(),
+            queryTime: queryResponse?.query_time_ms || queryResponse?._client_time_ms,
+          },
+        ]);
+      }
+    }
+  }, [answer]);
 
   function submit(event) {
     event.preventDefault();
     if (!question.trim() || (!dataset && queryScope === "selected") || loading) return;
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", text: question.trim(), timestamp: new Date().toISOString() },
+    ]);
     onAsk(question.trim(), exact);
+    setQuestion("");
   }
 
   return (
-    <section className="glass-panel animate-slide-up" style={{ animationDelay: "0.15s" }}>
+    <section className="glass-panel animate-slide-up chat-panel" style={{ animationDelay: "0.15s" }} id="chat-panel">
       <div className="panel-header">
         <div className="flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-signal-gold" />
@@ -44,6 +74,7 @@ export default function ChatPanel({ dataset, datasetCount, queryScope, onScopeCh
             style={{ borderRadius: "6px" }}
             onClick={() => onScopeChange("selected")}
             disabled={loading}
+            id="scope-selected-btn"
           >
             Selected file
           </button>
@@ -57,9 +88,40 @@ export default function ChatPanel({ dataset, datasetCount, queryScope, onScopeCh
             style={{ borderRadius: "6px" }}
             onClick={() => onScopeChange("all")}
             disabled={loading || datasetCount === 0}
+            id="scope-all-btn"
           >
             All uploads
           </button>
+        </div>
+
+        {/* Chat messages area */}
+        <div className="chat-messages" id="chat-messages">
+          {messages.length === 0 && !loading && (
+            <div className="flex flex-col items-center justify-center py-6 text-center text-graphite-500">
+              <Sparkles className="h-8 w-8 mb-2 text-graphite-600" />
+              <p className="text-sm">Ask a question about your data</p>
+            </div>
+          )}
+
+          {messages.map((msg, i) => (
+            <ChatBubble key={i} message={msg} />
+          ))}
+
+          {/* Skeleton loading */}
+          {loading && (
+            <div className="chat-bubble ai">
+              <div className="chat-bubble-avatar ai">
+                <Sparkles className="h-3.5 w-3.5" />
+              </div>
+              <div className="chat-bubble-content ai">
+                <div className="shimmer-line w-3/4 mb-2" />
+                <div className="shimmer-line w-1/2 mb-2" />
+                <div className="shimmer-line w-2/3" />
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
         </div>
 
         {/* Question input */}
@@ -68,8 +130,7 @@ export default function ChatPanel({ dataset, datasetCount, queryScope, onScopeCh
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
             placeholder={dataset || queryScope === "all" ? "Ask about your parquet data..." : "Upload a parquet file first"}
-            className="min-h-24 w-full resize-y border border-glass-border bg-glass-white px-4 py-3 text-sm text-graphite-200 outline-none transition-all duration-200 placeholder:text-graphite-600 focus:border-signal-teal/50 focus:shadow-glow-teal"
-            style={{ borderRadius: "10px", backdropFilter: "blur(8px)" }}
+            className="chat-input"
             disabled={(!dataset && queryScope === "selected") || loading}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -77,6 +138,7 @@ export default function ChatPanel({ dataset, datasetCount, queryScope, onScopeCh
                 submit(e);
               }
             }}
+            id="chat-input"
           />
 
           {/* Suggestions */}
@@ -85,8 +147,7 @@ export default function ChatPanel({ dataset, datasetCount, queryScope, onScopeCh
               <button
                 key={suggestion}
                 type="button"
-                className="border border-glass-border bg-glass-white px-2.5 py-1.5 text-[11px] font-medium text-graphite-400 transition-all duration-200 hover:border-graphite-400 hover:text-graphite-200"
-                style={{ borderRadius: "6px" }}
+                className="suggestion-chip"
                 onClick={() => setQuestion(suggestion)}
                 disabled={(!dataset && queryScope === "selected") || loading}
               >
@@ -111,26 +172,53 @@ export default function ChatPanel({ dataset, datasetCount, queryScope, onScopeCh
               type="submit"
               className="primary-button"
               disabled={(!dataset && queryScope === "selected") || loading || !question.trim()}
+              id="chat-submit-btn"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizonal className="h-4 w-4" />}
               Ask
             </button>
           </div>
         </form>
-
-        {/* Answer display */}
-        {answer ? (
-          <div className="answer-card animate-slide-up px-5 py-4">
-            <div className="mb-2 flex items-center gap-2">
-              <Sparkles className="h-3.5 w-3.5 text-teal-400" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-teal-400">
-                AI Answer
-              </span>
-            </div>
-            <p className="text-sm leading-relaxed text-graphite-200">{answer}</p>
-          </div>
-        ) : null}
       </div>
     </section>
+  );
+}
+
+function ChatBubble({ message }) {
+  const [copied, setCopied] = useState(false);
+  const isUser = message.role === "user";
+  const time = new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  function handleCopy() {
+    navigator.clipboard.writeText(message.text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  return (
+    <div className={`chat-bubble ${isUser ? "user" : "ai"}`}>
+      <div className={`chat-bubble-avatar ${isUser ? "user" : "ai"}`}>
+        {isUser ? <User className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
+      </div>
+      <div className={`chat-bubble-content ${isUser ? "user" : "ai"}`}>
+        <p className="text-sm leading-relaxed">{message.text}</p>
+        <div className="chat-bubble-meta">
+          <span className="text-[10px] text-graphite-600">{time}</span>
+          {!isUser && (
+            <button
+              type="button"
+              className="chat-copy-btn"
+              onClick={handleCopy}
+              title="Copy response"
+            >
+              {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+            </button>
+          )}
+          {message.queryTime && (
+            <span className="text-[10px] text-graphite-600">{message.queryTime}ms</span>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

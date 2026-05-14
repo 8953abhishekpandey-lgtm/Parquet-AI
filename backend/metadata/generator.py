@@ -39,6 +39,8 @@ class SemanticMetadataGenerator:
 
     def build_documents(self, manifest: DatasetManifest) -> list[dict[str, Any]]:
         documents: list[dict[str, Any]] = []
+
+        # ── 1. Dataset-level summary ──────────────────────────────────
         schema_summary = ", ".join(
             f"{column.name} ({column.normalized_name}, {column.dtype})" for column in manifest.columns
         )
@@ -60,12 +62,14 @@ class SemanticMetadataGenerator:
             }
         )
 
+        # ── 2. Rich column-level chunks ───────────────────────────────
         for column in manifest.columns:
+            rich_text = self._rich_column_chunk(column, manifest.filename)
             documents.append(
                 {
                     "document_id": f"{manifest.dataset_id}:column:{column.name}",
                     "kind": "column",
-                    "text": column.semantic_text,
+                    "text": rich_text,
                     "payload": {
                         "dataset_id": manifest.dataset_id,
                         "filename": manifest.filename,
@@ -73,12 +77,44 @@ class SemanticMetadataGenerator:
                         "column_name": column.name,
                         "normalized_name": column.normalized_name,
                         "dtype": column.dtype,
+                        "datatype": self._broad_type(column.dtype),
                         "stats": column.stats,
-                        "sample_values": column.sample_values,
+                        "sample_values": column.sample_values[:5],
+                        "semantic_chunk": rich_text,
                     },
                 }
             )
 
+        # ── 3. High-cardinality value chunks ──────────────────────────
+        for column in manifest.columns:
+            distinct = column.stats.get("distinct_count")
+            if distinct and distinct > 50 and not self._is_numeric_type(column.dtype):
+                top_values = column.stats.get("top_values", [])
+                if top_values:
+                    vals = [str(v.get("value", v)) if isinstance(v, dict) else str(v)
+                            for v in top_values[:20]]
+                    value_text = (
+                        f"{column.name} | high-cardinality column in {manifest.filename} "
+                        f"| {distinct} unique values | top values: {', '.join(vals)}"
+                    )
+                    documents.append(
+                        {
+                            "document_id": f"{manifest.dataset_id}:values:{column.name}",
+                            "kind": "value_list",
+                            "text": value_text[:1024],  # max 256 tokens ≈ ~1024 chars
+                            "payload": {
+                                "dataset_id": manifest.dataset_id,
+                                "filename": manifest.filename,
+                                "kind": "value_list",
+                                "column_name": column.name,
+                                "dtype": column.dtype,
+                                "datatype": self._broad_type(column.dtype),
+                                "distinct_count": distinct,
+                            },
+                        }
+                    )
+
+        # ── 4. Sample row chunks ──────────────────────────────────────
         for index, row in enumerate(manifest.sample_rows[:5]):
             values = "; ".join(f"{key}: {value}" for key, value in row.items())
             documents.append(
@@ -98,6 +134,43 @@ class SemanticMetadataGenerator:
 
         return documents
 
+    # ── rich column chunk (replaces old semantic_text for embedding) ──
+
+    def _rich_column_chunk(self, column: ColumnProfile, filename: str) -> str:
+        """Build a rich semantic chunk per the spec:
+        {column_name} | type: {dtype} | sample values: {top_5} |
+        stats: min={min}, max={max}, nulls={null_pct}% | file: {filename}
+        """
+        samples = ", ".join(str(v) for v in column.sample_values[:5])
+        parts = [
+            f"{column.name}",
+            f"type: {column.dtype}",
+            f"sample values: {samples or 'none'}",
+        ]
+
+        # stats
+        stats = column.stats
+        stat_items: list[str] = []
+        if stats.get("min_value") is not None:
+            stat_items.append(f"min={stats['min_value']}")
+        if stats.get("max_value") is not None:
+            stat_items.append(f"max={stats['max_value']}")
+        if stats.get("avg_value") is not None:
+            stat_items.append(f"avg={stats['avg_value']}")
+        if stats.get("null_count") is not None and stats.get("distinct_count") is not None:
+            total = stats.get("null_count", 0) + stats.get("distinct_count", 0)
+            null_pct = round(stats["null_count"] / max(total, 1) * 100, 1)
+            stat_items.append(f"nulls={null_pct}%")
+        if stats.get("distinct_count") is not None:
+            stat_items.append(f"distinct={stats['distinct_count']}")
+
+        if stat_items:
+            parts.append(f"stats: {', '.join(stat_items)}")
+
+        parts.append(f"file: {filename}")
+
+        return " | ".join(parts)
+
     def _column_semantic_text(
         self,
         name: str,
@@ -114,3 +187,23 @@ class SemanticMetadataGenerator:
             f"Profile statistics: {stats_text or 'not available'}."
         )
 
+    @staticmethod
+    def _broad_type(dtype: str) -> str:
+        """Map detailed DuckDB type to a broad category for payload indexing."""
+        upper = dtype.upper()
+        if any(m in upper for m in ("INT", "BIGINT", "SMALLINT", "TINYINT", "HUGEINT")):
+            return "integer"
+        if any(m in upper for m in ("FLOAT", "DOUBLE", "DECIMAL", "REAL")):
+            return "float"
+        if any(m in upper for m in ("DATE", "TIME", "TIMESTAMP")):
+            return "datetime"
+        if any(m in upper for m in ("BOOL",)):
+            return "boolean"
+        return "string"
+
+    @staticmethod
+    def _is_numeric_type(dtype: str) -> bool:
+        upper = dtype.upper()
+        return any(m in upper for m in (
+            "INT", "BIGINT", "SMALLINT", "TINYINT", "FLOAT", "DOUBLE", "DECIMAL", "REAL",
+        ))

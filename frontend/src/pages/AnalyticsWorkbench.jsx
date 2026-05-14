@@ -6,9 +6,10 @@ import DatasetSelector from "../components/DatasetSelector.jsx";
 import DebugPanel from "../components/DebugPanel.jsx";
 import ResultsTable from "../components/ResultsTable.jsx";
 import SchemaExplorer from "../components/SchemaExplorer.jsx";
+import Sidebar from "../components/Sidebar.jsx";
 import StatusPill from "../components/StatusPill.jsx";
 import UploadDropzone from "../components/UploadDropzone.jsx";
-import { askAllDatasets, askQuestion, listDatasets, uploadParquets, deleteDataset } from "../services/api.js";
+import { askAllDatasets, askQuestion, checkHealth, listDatasets, uploadParquets, deleteDataset } from "../services/api.js";
 
 export default function AnalyticsWorkbench() {
   const [datasets, setDatasets] = useState([]);
@@ -18,27 +19,44 @@ export default function AnalyticsWorkbench() {
   const [querying, setQuerying] = useState(false);
   const [queryScope, setQueryScope] = useState("selected");
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState("upload");
+  const [health, setHealth] = useState(null);
+  const [lastUploadedDataset, setLastUploadedDataset] = useState(null);
+
+  // Health check on mount + periodic
+  useEffect(() => {
+    checkHealth().then(setHealth);
+    const interval = setInterval(() => checkHealth().then(setHealth), 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   async function refreshDatasets() {
-    const items = await listDatasets();
-    setDatasets(items);
-    if (!selectedDataset && items.length) {
-      setSelectedDataset(items[0]);
+    try {
+      const items = await listDatasets();
+      setDatasets(items);
+      if (!selectedDataset && items.length) {
+        setSelectedDataset(items[0]);
+      }
+    } catch (err) {
+      setError(err.message);
     }
   }
 
   useEffect(() => {
-    refreshDatasets().catch((err) => setError(err.message));
+    refreshDatasets();
   }, []);
 
   async function handleUpload(files) {
     setError("");
     setUploading(true);
     setQueryResponse(null);
+    setLastUploadedDataset(null);
     try {
       const response = await uploadParquets(files);
       if (response.datasets.length) {
         setSelectedDataset(response.datasets[0]);
+        setLastUploadedDataset(response.datasets[0]);
+        setActiveTab("explorer");
       }
       if (response.errors.length) {
         const failed = response.errors.map((item) => `${item.filename}: ${item.error}`).join(" | ");
@@ -62,7 +80,6 @@ export default function AnalyticsWorkbench() {
         const allResponse = await askAllDatasets({
           question,
           datasetIds: datasets.map((dataset) => dataset.dataset_id),
-          limit: 100,
           exact,
         });
         setQueryResponse(allResponse);
@@ -71,7 +88,6 @@ export default function AnalyticsWorkbench() {
       const response = await askQuestion({
         datasetId: selectedDataset.dataset_id,
         question,
-        limit: 100,
         exact,
       });
       setQueryResponse(response);
@@ -96,55 +112,13 @@ export default function AnalyticsWorkbench() {
     }
   }
 
-  return (
-    <main className="min-h-screen">
-      {/* ── Header ──────────────────────────────────────────── */}
-      <header className="border-b border-glass-border" style={{ background: "rgba(255,255,255,0.02)" }}>
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-5">
-          <div className="flex items-center gap-4">
-            <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-signal-teal to-signal-cyan text-white shadow-glow-teal">
-              <DatabaseZap className="h-6 w-6" />
-              <div className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-graphite-950 bg-emerald-400 animate-pulse" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-white">
-                Parquet AI Analytics
-              </h1>
-              <p className="mt-0.5 text-xs text-graphite-500">
-                Secure RAG · Local Embeddings · Qdrant Vectors · Claude Reasoning · DuckDB Execution
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <StatusPill tone="success">
-              <Shield className="h-3 w-3" /> Enterprise Secure
-            </StatusPill>
-            <StatusPill tone="purple">
-              <Zap className="h-3 w-3" /> Claude AI
-            </StatusPill>
-            <StatusPill tone="neutral">
-              <BrainCircuit className="h-3 w-3" /> Local RAG
-            </StatusPill>
-          </div>
-        </div>
-      </header>
-
-      {/* ── Main content ────────────────────────────────────── */}
-      <div className="mx-auto max-w-7xl space-y-4 px-4 py-5">
-        {error ? (
-          <div
-            className="animate-slide-down border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"
-            style={{ borderRadius: "10px" }}
-          >
-            <button className="float-right ml-3 text-red-400 hover:text-red-200" onClick={() => setError("")}>✕</button>
-            {error}
-          </div>
-        ) : null}
-
-        <div className="grid gap-4 lg:grid-cols-[20rem_minmax(0,1fr)]">
-          {/* ── Sidebar ──────────────────────────────────── */}
-          <aside className="space-y-4">
-            <UploadDropzone onUpload={handleUpload} loading={uploading} />
+  // Determine what to show based on active tab
+  function renderMainContent() {
+    switch (activeTab) {
+      case "upload":
+        return (
+          <div className="space-y-4">
+            <UploadDropzone onUpload={handleUpload} loading={uploading} lastUploadedDataset={lastUploadedDataset} />
             <DatasetSelector
               datasets={datasets}
               selectedId={selectedDataset?.dataset_id}
@@ -152,11 +126,8 @@ export default function AnalyticsWorkbench() {
                 setSelectedDataset(dataset);
                 setQueryResponse(null);
               }}
-              onDelete={async (id) => {
-                await handleDeleteDataset(id);
-              }}
+              onDelete={handleDeleteDataset}
             />
-
             {/* Pipeline status */}
             <section className="glass-panel animate-fade-in" style={{ animationDelay: "0.2s" }}>
               <div className="panel-header flex items-center justify-between gap-3">
@@ -171,19 +142,35 @@ export default function AnalyticsWorkbench() {
               <div className="space-y-1 p-4">
                 <PipelineStep step={1} label="Parquet upload" active={Boolean(selectedDataset)} />
                 <PipelineStep step={2} label="Schema detection" active={Boolean(selectedDataset)} />
-                <PipelineStep step={3} label="Local embeddings" active={Boolean(selectedDataset?.metadata_count)} />
+                <PipelineStep step={3} label="BGE embeddings" active={Boolean(selectedDataset?.metadata_count)} />
                 <PipelineStep step={4} label="Qdrant vectors" active={Boolean(selectedDataset?.metadata_count)} />
                 <PipelineStep step={5} label="Semantic retrieval" active={Boolean(queryResponse)} />
                 <PipelineStep step={6} label="Claude reasoning" active={Boolean(queryResponse?.ai_reasoning)} />
                 <PipelineStep step={7} label="DuckDB execution" active={Boolean(queryResponse)} />
               </div>
             </section>
-          </aside>
-
-          {/* ── Main panels ──────────────────────────────── */}
-          <section className="space-y-4">
-            <SchemaExplorer dataset={selectedDataset} />
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+          </div>
+        );
+      case "explorer":
+        return (
+          <SchemaExplorer
+            dataset={selectedDataset}
+            datasets={datasets}
+            onSelectDataset={(ds) => {
+              setSelectedDataset(ds);
+              setQueryResponse(null);
+            }}
+            onShowAll={() => {
+              setActiveTab("chat");
+              setQueryScope("all");
+              handleAsk("show all data present in all files joined together");
+            }}
+          />
+        );
+      case "chat":
+        return (
+          <div className="space-y-4">
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
               <ChatPanel
                 dataset={selectedDataset}
                 datasetCount={datasets.length}
@@ -196,14 +183,79 @@ export default function AnalyticsWorkbench() {
                 loading={querying}
                 answer={queryResponse?.answer}
                 aiReasoning={queryResponse?.ai_reasoning}
+                queryResponse={queryResponse}
               />
               <DebugPanel response={queryResponse} />
             </div>
             <ResultsTable response={queryResponse} />
-          </section>
+          </div>
+        );
+      case "debug":
+        return (
+          <div className="space-y-4">
+            <DebugPanel response={queryResponse} />
+            <ResultsTable response={queryResponse} />
+          </div>
+        );
+      default:
+        return null;
+    }
+  }
+
+  return (
+    <div className="app-layout">
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} datasetCount={datasets.length} />
+
+      <div className="app-main">
+        {/* ── Top Navbar ──────────────────────────────────────────── */}
+        <header className="top-navbar" id="top-navbar">
+          <div className="flex items-center gap-4">
+            <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-signal-teal to-signal-cyan text-white shadow-glow-teal">
+              <DatabaseZap className="h-5 w-5" />
+              <div className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-graphite-950 bg-emerald-400 animate-pulse" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold tracking-tight text-white">
+                Parquet AI Analytics
+              </h1>
+              <p className="text-[11px] text-graphite-500">
+                Secure RAG · BGE Embeddings · Qdrant Vectors · Claude AI · DuckDB
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* Connection status badges */}
+            <StatusBadge label="Qdrant" ok={health?.services?.qdrant} />
+            <StatusBadge label="DuckDB" ok={health?.services?.duckdb} />
+            <StatusBadge label="Claude" ok={health?.services?.claude} />
+          </div>
+        </header>
+
+        {/* ── Main content ────────────────────────────────────── */}
+        <div className="app-content">
+          {error ? (
+            <div
+              className="animate-slide-down border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+              style={{ borderRadius: "10px" }}
+            >
+              <button className="float-right ml-3 text-red-400 hover:text-red-200" onClick={() => setError("")}>✕</button>
+              {error}
+            </div>
+          ) : null}
+
+          {renderMainContent()}
         </div>
       </div>
-    </main>
+    </div>
+  );
+}
+
+function StatusBadge({ label, ok }) {
+  return (
+    <div className="status-badge" id={`status-${label.toLowerCase()}`}>
+      <span className={`status-dot ${ok ? "online" : ok === false ? "offline" : "unknown"}`} />
+      <span className="text-[11px] font-medium text-graphite-300">{label}</span>
+    </div>
   );
 }
 

@@ -43,14 +43,14 @@ class MultiUploadResponse(BaseModel):
 class QueryRequest(BaseModel):
     dataset_id: str
     question: str
-    limit: int = Field(default=100, ge=1, le=500)
+    limit: int = Field(default=999_999_999, ge=1)
     exact: bool = False
 
 
 class QueryAllRequest(BaseModel):
     question: str
     dataset_ids: list[str] | None = None
-    limit: int = Field(default=100, ge=1, le=500)
+    limit: int = Field(default=999_999_999, ge=1)
     exact: bool = False
 
 
@@ -83,6 +83,7 @@ class QueryResponse(BaseModel):
     columns: list[str]
     rows: list[dict[str, Any]]
     row_count: int
+    query_time_ms: float = 0.0
     security_audit: dict[str, Any] = Field(default_factory=lambda: {
         "data_sent_to_api": {},
         "data_kept_local": {

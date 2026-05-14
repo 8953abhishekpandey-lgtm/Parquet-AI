@@ -26,19 +26,24 @@ logger = logging.getLogger(__name__)
 # ── system prompts ────────────────────────────────────────────────────────────
 
 SQL_SYSTEM_PROMPT = """\
-You are an expert DuckDB SQL analyst. You generate precise, executable DuckDB SQL queries.
+You are a DuckDB SQL expert. You generate precise, executable DuckDB SQL queries.
 
 CRITICAL RULES:
 1. Generate ONLY valid DuckDB SQL — no MySQL, PostgreSQL, or SQLite syntax.
 2. The parquet data is loaded as a view named "dataset". Always query FROM dataset.
-3. Use double-quotes for column identifiers that contain spaces or special characters.
-4. Always add LIMIT clause (use the limit provided).
+3. Column names are CASE-SENSITIVE. Use double-quotes for column identifiers that contain spaces, special characters, or mixed case.
+4. Do NOT add a LIMIT clause unless the user explicitly asks for a specific number of rows (e.g. "show top 10"). Return ALL matching rows by default.
 5. For aggregations, alias the result column as "metric_value".
 6. For group-by dimension columns, preserve the original column name as alias.
-7. Return ONLY the SQL query — no markdown, no explanation, no code fences.
-8. Handle NULL values with IS NOT NULL in WHERE clauses.
+7. Return ONLY the JSON object — no markdown, no explanation, no code fences.
+8. Handle NULL values with IS NOT NULL in WHERE clauses when filtering.
 9. For counting, use COUNT(*) aliased as "record_count".
 10. DuckDB supports: DATE_TRUNC, STDDEV_POP, string functions, window functions.
+11. Use EXACT column names as provided in the schema — do NOT guess or modify them.
+12. When the user asks to filter by a value (e.g. status='installed', type='with'), use WHERE with exact column matching. Use CAST to VARCHAR if the column type is uncertain.
+13. When comparing dates, use proper DuckDB TIMESTAMP/DATE syntax: e.g. WHERE CAST(col AS VARCHAR) NOT LIKE '9999-12-31%' or WHERE col IS NOT NULL.
+14. When the user says "not null" or "not equal to", translate to IS NOT NULL or != in SQL. If they say "not null or not equal to X", it usually means they want valid records: (col IS NOT NULL AND CAST(col AS VARCHAR) NOT LIKE 'X%').
+15. Pay close attention to the user's exact filter conditions. If they ask for rows where status = 'installed' AND a date column is not null AND not equal to a specific value, implement ALL conditions accurately in the WHERE clause.
 
 RESPONSE FORMAT — return ONLY a JSON object with these exact keys:
 {
@@ -67,17 +72,20 @@ RULES:
 """
 
 MULTI_TABLE_SQL_SYSTEM_PROMPT = """\
-You are an expert DuckDB SQL analyst working with MULTIPLE parquet tables.
+You are a DuckDB SQL expert working with MULTIPLE parquet tables.
 
 CRITICAL RULES:
 1. Generate ONLY valid DuckDB SQL.
 2. Tables are loaded as views with specific relation names (provided in context).
 3. Use the exact relation names provided — do NOT use "dataset".
-4. Use double-quotes for identifiers with spaces or special characters.
+4. Column names are CASE-SENSITIVE. Use double-quotes for identifiers with spaces or special characters.
 5. When joining tables, use LEFT JOIN with the join keys provided.
-6. Always add LIMIT clause.
+6. Do NOT add a LIMIT clause unless the user explicitly asks for a specific number of rows. Return ALL matching rows by default.
 7. For aggregations, alias result as "metric_value".
 8. Return ONLY a JSON object (same format as single-table queries).
+9. When the user asks to filter by a value, use WHERE with exact column matching. Use CAST to VARCHAR if needed.
+10. When comparing dates, use proper DuckDB TIMESTAMP/DATE syntax. Handle "not null" by using IS NOT NULL.
+11. Pay close attention to all filter conditions the user specifies. For exclusions like "not equal to 9999-12-31", use CAST(col AS VARCHAR) NOT LIKE '9999-12-31%'.
 
 RESPONSE FORMAT — return ONLY a JSON object:
 {
@@ -89,6 +97,27 @@ RESPONSE FORMAT — return ONLY a JSON object:
   "selected_columns": [],
   "explanation": "..."
 }
+"""
+
+SQL_FIX_PROMPT = """\
+The following DuckDB SQL query failed with an error. Fix the SQL and return a corrected version.
+
+ORIGINAL SQL:
+{sql}
+
+ERROR:
+{error}
+
+Fix the SQL and return ONLY a JSON object in the same format:
+{{
+  "sql": "SELECT ...",
+  "intent": "...",
+  "aggregation": "...",
+  "metric_column": "...",
+  "group_by_columns": [],
+  "selected_columns": [],
+  "explanation": "..."
+}}
 """
 
 
@@ -129,19 +158,19 @@ class ClaudeReasoningEngine:
         limit: int,
     ) -> tuple[str, dict[str, Any]]:
         """
-        Build minimal context for Claude.
+        Build structured minimal context for Claude.
         Returns (context_string, security_audit_dict).
 
         SECURITY: Only sends column names, types, ≤5 sample values, and
         top semantic match snippets. NEVER sends full rows or raw data.
         """
+        max_chars = self.settings.context_max_tokens * 4  # ~4 chars per token
+
         # Extract relevant columns from semantic matches
         matched_columns: list[dict[str, Any]] = []
-        matched_texts: list[str] = []
         seen_columns: set[str] = set()
 
-        for match in matches[:8]:  # limit to top 8 matches
-            matched_texts.append(match.text[:200])  # truncate long texts
+        for match in matches[:10]:  # limit to top 10 matches
             if match.column_name and match.column_name not in seen_columns:
                 seen_columns.add(match.column_name)
                 col_info = next(
@@ -155,38 +184,47 @@ class ClaudeReasoningEngine:
                         "sample_values": col_info.sample_values[:5],
                         "stats": {
                             k: v for k, v in col_info.stats.items()
-                            if k in ("distinct_count", "min_value", "max_value", "avg_value")
+                            if k in ("distinct_count", "min_value", "max_value", "avg_value", "null_count")
                         },
                     })
 
-        # Build full schema summary (names + types only, no data)
-        schema_lines = [
-            f"  - {c.name} ({c.dtype})" for c in manifest.columns
-        ]
+        # ── Build structured context block ─────────────────────────────
+        context = f"File: {manifest.filename}\n"
+        context += f"Row Count: {manifest.row_count}\n\n"
 
-        context = (
-            f"PARQUET FILE: {manifest.filename}\n"
-            f"ROW COUNT: {manifest.row_count}\n"
-            f"FULL SCHEMA:\n" + "\n".join(schema_lines) + "\n\n"
-            f"SEMANTICALLY MATCHED COLUMNS (most relevant to the question):\n"
-        )
+        # Full schema (names + types only)
+        context += "Full Schema:\n"
+        for c in manifest.columns:
+            context += f"  - {c.name} ({c.dtype})\n"
 
+        context += "\nRelevant Columns:\n"
         for col in matched_columns:
             samples = ", ".join(str(v) for v in col["sample_values"])
-            stats_str = ", ".join(f"{k}: {v}" for k, v in col["stats"].items() if v is not None)
+            stats_parts = []
+            for k, v in col["stats"].items():
+                if v is not None:
+                    stats_parts.append(f"{k}={v}")
+            stats_str = ", ".join(stats_parts) if stats_parts else "n/a"
             context += (
-                f"  Column: {col['name']} (type: {col['dtype']})\n"
-                f"    Sample values: {samples}\n"
-                f"    Stats: {stats_str}\n"
+                f"  {col['name']} ({col['dtype']}) — "
+                f"samples: [{samples}] — stats: {stats_str}\n"
             )
 
-        context += (
-            f"\nSEMANTIC MATCHES (retrieved from local Qdrant vector DB):\n"
-        )
-        for i, text in enumerate(matched_texts, 1):
-            context += f"  {i}. {text}\n"
+        # Include top 3 sample rows for matched columns
+        if manifest.sample_rows and matched_columns:
+            context += "\nSample Rows (first 3):\n"
+            col_names = [c["name"] for c in matched_columns[:6]]
+            for i, row in enumerate(manifest.sample_rows[:3], 1):
+                row_vals = ", ".join(
+                    f"{cn}={row.get(cn, 'NULL')}" for cn in col_names if cn in row
+                )
+                context += f"  Row {i}: {row_vals}\n"
 
-        context += f"\nQUERY LIMIT: {limit}\n"
+        context += "\nReturn ALL matching rows (no LIMIT unless user specifies a number).\n"
+
+        # Truncate to max token budget
+        if len(context) > max_chars:
+            context = context[:max_chars] + "\n... [truncated to fit token budget]"
 
         # Security audit — track exactly what was sent
         security_audit = {
@@ -194,8 +232,9 @@ class ClaudeReasoningEngine:
                 "schema_column_count": len(manifest.columns),
                 "matched_column_details": len(matched_columns),
                 "sample_values_per_column": "max 5",
-                "semantic_match_snippets": len(matched_texts),
-                "max_snippet_length": 200,
+                "sample_rows_sent": min(3, len(manifest.sample_rows)),
+                "context_chars": len(context),
+                "estimated_tokens": len(context) // 4,
             },
             "data_kept_local": {
                 "full_parquet_file": True,
@@ -219,6 +258,7 @@ class ClaudeReasoningEngine:
         limit: int,
     ) -> tuple[str, dict[str, Any]]:
         """Build minimal context for multi-table queries."""
+        max_chars = self.settings.context_max_tokens * 4
         context = "AVAILABLE TABLES:\n"
         total_cols = 0
 
@@ -241,7 +281,11 @@ class ClaudeReasoningEngine:
         # Add join hints
         context += "\nJOIN HINTS (inferred locally):\n"
         context += "  Look for columns with matching names across tables for join keys.\n"
-        context += f"\nQUERY LIMIT: {limit}\n"
+        context += "\nReturn ALL matching rows (no LIMIT unless user specifies a number).\n"
+
+        # Truncate
+        if len(context) > max_chars:
+            context = context[:max_chars] + "\n... [truncated]"
 
         security_audit = {
             "data_sent_to_api": {
@@ -249,6 +293,8 @@ class ClaudeReasoningEngine:
                 "total_columns": total_cols,
                 "sample_values_per_column": "max 3",
                 "semantic_match_snippets": min(len(matches), 10),
+                "context_chars": len(context),
+                "estimated_tokens": len(context) // 4,
             },
             "data_kept_local": {
                 "full_parquet_files": True,
@@ -321,6 +367,23 @@ class ClaudeReasoningEngine:
             security_audit=security_audit,
         )
 
+    def fix_sql_error(
+        self,
+        original_sql: str,
+        error_message: str,
+        limit: int,
+    ) -> GeneratedSQL:
+        """Send a failed SQL + error back to Claude for a one-shot fix."""
+        user_message = SQL_FIX_PROMPT.format(sql=original_sql, error=error_message)
+
+        plan, _ = self._call_claude_for_sql(
+            system_prompt=SQL_SYSTEM_PROMPT,
+            user_message=user_message,
+            limit=limit,
+            security_audit={},
+        )
+        return plan
+
     def _call_claude_for_sql(
         self,
         system_prompt: str,
@@ -388,6 +451,10 @@ class ClaudeReasoningEngine:
         # Validate SQL starts with SELECT or WITH
         if not sql.upper().lstrip().startswith(("SELECT", "WITH")):
             raise ValueError(f"Claude generated non-SELECT SQL: {sql[:50]}")
+
+        # Forcefully strip LIMIT if it's supposed to be unlimited
+        if limit >= 999_999_999:
+            sql = re.sub(r'(?i)\s+LIMIT\s+\d+\s*$', '', sql)
 
         return GeneratedSQL(
             sql=sql,

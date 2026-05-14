@@ -33,3 +33,4 @@ app.include_router(query.router)
 def startup() -> None:
     settings.ensure_directories()
 
+# Trigger reload
