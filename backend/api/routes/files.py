@@ -1,62 +1,120 @@
-from fastapi import APIRouter, File, HTTPException, UploadFile
+"""
+Files Route — GET /api/files, DELETE /api/files/{filename}
 
-from backend.models import DatasetManifest, MultiUploadResponse, UploadFailure, UploadResponse
-from backend.services.pipeline import AnalyticsPipeline
+Manage uploaded parquet files: list, delete, re-index.
+"""
+
+import os
+from fastapi import APIRouter, Request, HTTPException
+
+from backend.services.schema_service import extract_schema
+from backend.services.join_service import update_join_map
+
+router = APIRouter()
 
 
-router = APIRouter(prefix="/api", tags=["files"])
-pipeline = AnalyticsPipeline()
+@router.get("/files")
+async def list_files(request: Request):
+    """
+    List all uploaded and indexed parquet files.
 
-@router.post("/files/upload", response_model=UploadResponse)
-async def upload_parquet(file: UploadFile = File(...)) -> UploadResponse:
+    Returns:
+        List of file info dictionaries.
+    """
+    file_registry = request.app.state.file_registry
+    files = file_registry.get_all_files()
+    return {"files": files, "count": len(files)}
+
+
+@router.delete("/files/{filename}")
+async def delete_file(request: Request, filename: str):
+    """
+    Delete an uploaded parquet file and its associated metadata.
+
+    Args:
+        filename: The parquet filename to delete.
+
+    Returns:
+        Confirmation of deletion.
+    """
+    upload_dir = os.getenv("UPLOAD_DIR", "./uploads")
+    metadata_dir = os.getenv("METADATA_DIR", "./metadata")
+    filepath = os.path.join(upload_dir, filename)
+
+    # Delete physical file
+    if os.path.exists(filepath):
+        os.remove(filepath)
+
+    # Delete schema
+    schema_store = request.app.state.schema_store
+    schema_store.delete_schema(filename)
+
+    # Remove from registry
+    file_registry = request.app.state.file_registry
+    removed = file_registry.delete_file(filename)
+
+    if not removed:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "File not found", "detail": f"'{filename}' not in registry"}
+        )
+
+    # Update join map after deletion
+    all_schemas = schema_store.get_all_schemas()
+    update_join_map(all_schemas, metadata_dir)
+
+    return {"status": "deleted", "filename": filename}
+
+
+@router.post("/files/{filename}/reindex")
+async def reindex_file(request: Request, filename: str):
+    """
+    Re-extract schema for an existing file.
+
+    Args:
+        filename: The parquet filename to re-index.
+
+    Returns:
+        Updated schema information.
+    """
+    upload_dir = os.getenv("UPLOAD_DIR", "./uploads")
+    metadata_dir = os.getenv("METADATA_DIR", "./metadata")
+    filepath = os.path.abspath(os.path.join(upload_dir, filename))
+
+    if not os.path.exists(filepath):
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "File not found", "detail": f"'{filename}' not on disk"}
+        )
+
     try:
-        dataset = await pipeline.ingest_upload(file)
-        return UploadResponse(dataset=dataset)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except ConnectionError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {exc}") from exc
+        schema = extract_schema(filepath, filename)
 
+        schema_store = request.app.state.schema_store
+        schema_store.save_schema(filename, schema)
 
-@router.post("/files/upload-multiple", response_model=MultiUploadResponse)
-async def upload_multiple_parquet(files: list[UploadFile] = File(...)) -> MultiUploadResponse:
-    if not files:
-        raise HTTPException(status_code=400, detail="At least one parquet file is required.")
+        file_registry = request.app.state.file_registry
+        file_registry.register_file(
+            filename=filename,
+            filepath=filepath,
+            file_size_bytes=os.path.getsize(filepath),
+            row_count=schema["row_count"],
+            col_count=schema["col_count"],
+        )
 
-    datasets: list[DatasetManifest] = []
-    errors: list[UploadFailure] = []
+        # Update join map
+        all_schemas = schema_store.get_all_schemas()
+        join_map = update_join_map(all_schemas, metadata_dir)
 
-    for file in files:
-        filename = file.filename or "unknown"
-        try:
-            datasets.append(await pipeline.ingest_upload(file))
-        except Exception as exc:
-            errors.append(UploadFailure(filename=filename, error=str(exc)))
+        return {
+            "status": "reindexed",
+            "filename": filename,
+            "schema": schema,
+            "join_map": join_map,
+        }
 
-    return MultiUploadResponse(datasets=datasets, errors=errors)
-
-
-@router.get("/datasets", response_model=list[DatasetManifest])
-def list_datasets() -> list[DatasetManifest]:
-    return pipeline.list_datasets()
-
-
-@router.get("/datasets/{dataset_id}/schema", response_model=DatasetManifest)
-def get_dataset_schema(dataset_id: str) -> DatasetManifest:
-    try:
-        return pipeline.get_dataset(dataset_id)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Dataset not found") from exc
-
-
-@router.delete("/datasets/{dataset_id}", status_code=204)
-def delete_dataset(dataset_id: str) -> None:
-    try:
-        pipeline.delete_dataset(dataset_id)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Dataset not found") from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return None
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "Re-index failed", "detail": str(e)}
+        )

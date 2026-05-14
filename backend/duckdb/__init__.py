@@ -1,2 +1,1 @@
-"""DuckDB analytics utilities."""
-
+"""DuckDB package."""

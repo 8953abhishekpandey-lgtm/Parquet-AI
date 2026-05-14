@@ -1,2 +1,0 @@
-"""Local embedding model wrapper."""
-

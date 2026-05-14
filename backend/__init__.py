@@ -1,2 +1,1 @@
-"""Backend package for the local parquet analytics application."""
-
+"""Parquet AI Backend Package."""

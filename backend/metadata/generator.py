@@ -17,13 +17,6 @@ class SemanticMetadataGenerator:
         profiles: list[ColumnProfile] = []
         for column in raw_columns:
             normalized_name = self.normalize_column_name(column["name"])
-            semantic_text = self._column_semantic_text(
-                name=column["name"],
-                normalized_name=normalized_name,
-                dtype=column["dtype"],
-                sample_values=column.get("sample_values", []),
-                stats=column.get("stats", {}),
-            )
             profiles.append(
                 ColumnProfile(
                     name=column["name"],
@@ -32,164 +25,142 @@ class SemanticMetadataGenerator:
                     normalized_name=normalized_name,
                     sample_values=column.get("sample_values", []),
                     stats=column.get("stats", {}),
-                    semantic_text=semantic_text,
+                    semantic_text="",
                 )
             )
         return profiles
 
-    def build_documents(self, manifest: DatasetManifest) -> list[dict[str, Any]]:
+    def build_documents(self, manifest: DatasetManifest, join_map: dict[str, list[str]] = None) -> list[dict[str, Any]]:
         documents: list[dict[str, Any]] = []
+        if join_map is None:
+            join_map = {}
 
-        # ── 1. Dataset-level summary ──────────────────────────────────
+        file_path = manifest.stored_path
+
+        # ── CHUNK TYPE 3: File-Level Summary Chunk ──────────────────────────────────
         schema_summary = ", ".join(
-            f"{column.name} ({column.normalized_name}, {column.dtype})" for column in manifest.columns
+            f"{column.name} ({column.dtype})" for column in manifest.columns
         )
+        key_columns = [c.name for c in manifest.columns if c.stats.get("distinct_count", 0) > 0][:5]
+        
+        file_text = (
+            f"File '{manifest.filename}' contains {manifest.row_count} rows and {len(manifest.columns)} columns: "
+            f"{schema_summary}. "
+            f"Key columns: {', '.join(key_columns) if key_columns else 'none'}."
+        )
+        
         documents.append(
             {
-                "document_id": f"{manifest.dataset_id}:dataset",
-                "kind": "dataset",
-                "text": (
-                    f"Parquet file {manifest.filename}. Dataset schema with {manifest.row_count} rows. "
-                    f"Columns: {schema_summary}."
-                ),
+                "document_id": f"{manifest.dataset_id}:file_summary",
+                "kind": "file_summary",
+                "text": file_text,
                 "payload": {
                     "dataset_id": manifest.dataset_id,
                     "filename": manifest.filename,
-                    "kind": "dataset",
-                    "columns": [column.name for column in manifest.columns],
-                    "row_count": manifest.row_count,
+                    "chunk_type": "file_summary",
+                    "semantic_chunk_text": file_text,
+                    "file_path": file_path,
                 },
             }
         )
 
-        # ── 2. Rich column-level chunks ───────────────────────────────
+        # ── CHUNK TYPE 1: Column Semantic Chunk ───────────────────────────────
         for column in manifest.columns:
-            rich_text = self._rich_column_chunk(column, manifest.filename)
+            samples = ", ".join(str(v) for v in column.sample_values[:5])
+            
+            stats = column.stats
+            min_val = stats.get("min_value")
+            max_val = stats.get("max_value")
+            
+            total = stats.get("null_count", 0) + stats.get("distinct_count", 0)
+            null_pct = round(stats["null_count"] / max(total, 1) * 100, 1) if "null_count" in stats else 0
+            
+            col_text = (
+                f"Column '{column.name}' in file '{manifest.filename}' stores {column.dtype} data. "
+                f"Sample values: {samples if samples else 'none'}. "
+                f"Stats: min={min_val}, max={max_val}, null_rate={null_pct}%. "
+                f"Semantic meaning: {column.normalized_name} data."
+            )
+            
             documents.append(
                 {
                     "document_id": f"{manifest.dataset_id}:column:{column.name}",
                     "kind": "column",
-                    "text": rich_text,
+                    "text": col_text,
                     "payload": {
                         "dataset_id": manifest.dataset_id,
                         "filename": manifest.filename,
-                        "kind": "column",
                         "column_name": column.name,
-                        "normalized_name": column.normalized_name,
-                        "dtype": column.dtype,
                         "datatype": self._broad_type(column.dtype),
-                        "stats": column.stats,
-                        "sample_values": column.sample_values[:5],
-                        "semantic_chunk": rich_text,
+                        "chunk_type": "column",
+                        "semantic_chunk_text": col_text,
+                        "sample_values": [str(v) for v in column.sample_values[:5]],
+                        "stats": stats,
+                        "min_val": min_val,
+                        "max_val": max_val,
+                        "null_pct": null_pct,
+                        "file_path": file_path,
                     },
                 }
             )
 
-        # ── 3. High-cardinality value chunks ──────────────────────────
+        # ── CHUNK TYPE 2: Row Group Chunk (for categorical columns) ──────────────────────────
         for column in manifest.columns:
             distinct = column.stats.get("distinct_count")
-            if distinct and distinct > 50 and not self._is_numeric_type(column.dtype):
+            if distinct and distinct <= 50 and not self._is_numeric_type(column.dtype):
                 top_values = column.stats.get("top_values", [])
                 if top_values:
                     vals = [str(v.get("value", v)) if isinstance(v, dict) else str(v)
                             for v in top_values[:20]]
-                    value_text = (
-                        f"{column.name} | high-cardinality column in {manifest.filename} "
-                        f"| {distinct} unique values | top values: {', '.join(vals)}"
+                    cat_text = (
+                        f"In file '{manifest.filename}', column '{column.name}' contains categories: "
+                        f"{', '.join(vals)}"
                     )
                     documents.append(
                         {
-                            "document_id": f"{manifest.dataset_id}:values:{column.name}",
-                            "kind": "value_list",
-                            "text": value_text[:1024],  # max 256 tokens ≈ ~1024 chars
+                            "document_id": f"{manifest.dataset_id}:categories:{column.name}",
+                            "kind": "row_group",
+                            "text": cat_text,
                             "payload": {
                                 "dataset_id": manifest.dataset_id,
                                 "filename": manifest.filename,
-                                "kind": "value_list",
                                 "column_name": column.name,
-                                "dtype": column.dtype,
                                 "datatype": self._broad_type(column.dtype),
-                                "distinct_count": distinct,
+                                "chunk_type": "row_group",
+                                "semantic_chunk_text": cat_text,
+                                "file_path": file_path,
                             },
                         }
                     )
 
-        # ── 4. Sample row chunks ──────────────────────────────────────
-        for index, row in enumerate(manifest.sample_rows[:5]):
-            values = "; ".join(f"{key}: {value}" for key, value in row.items())
-            documents.append(
-                {
-                    "document_id": f"{manifest.dataset_id}:sample:{index}",
-                    "kind": "sample_row",
-                    "text": f"Sample row from {manifest.filename}. {values}",
-                    "payload": {
-                        "dataset_id": manifest.dataset_id,
-                        "filename": manifest.filename,
-                        "kind": "sample_row",
-                        "row_index": index,
-                        "row": row,
-                    },
-                }
-            )
+        # ── CHUNK TYPE 4: Relationship Chunk (for joinable columns) ───────────────────────────────
+        for column in manifest.columns:
+            other_files = [f for f in join_map.get(column.name, []) if f != manifest.filename]
+            if other_files:
+                rel_text = (
+                    f"Column '{column.name}' in '{manifest.filename}' appears to be a join key. "
+                    f"Matching columns found in: {', '.join(other_files)}"
+                )
+                documents.append(
+                    {
+                        "document_id": f"{manifest.dataset_id}:relationship:{column.name}",
+                        "kind": "relationship",
+                        "text": rel_text,
+                        "payload": {
+                            "dataset_id": manifest.dataset_id,
+                            "filename": manifest.filename,
+                            "column_name": column.name,
+                            "chunk_type": "relationship",
+                            "semantic_chunk_text": rel_text,
+                            "file_path": file_path,
+                        },
+                    }
+                )
 
         return documents
 
-    # ── rich column chunk (replaces old semantic_text for embedding) ──
-
-    def _rich_column_chunk(self, column: ColumnProfile, filename: str) -> str:
-        """Build a rich semantic chunk per the spec:
-        {column_name} | type: {dtype} | sample values: {top_5} |
-        stats: min={min}, max={max}, nulls={null_pct}% | file: {filename}
-        """
-        samples = ", ".join(str(v) for v in column.sample_values[:5])
-        parts = [
-            f"{column.name}",
-            f"type: {column.dtype}",
-            f"sample values: {samples or 'none'}",
-        ]
-
-        # stats
-        stats = column.stats
-        stat_items: list[str] = []
-        if stats.get("min_value") is not None:
-            stat_items.append(f"min={stats['min_value']}")
-        if stats.get("max_value") is not None:
-            stat_items.append(f"max={stats['max_value']}")
-        if stats.get("avg_value") is not None:
-            stat_items.append(f"avg={stats['avg_value']}")
-        if stats.get("null_count") is not None and stats.get("distinct_count") is not None:
-            total = stats.get("null_count", 0) + stats.get("distinct_count", 0)
-            null_pct = round(stats["null_count"] / max(total, 1) * 100, 1)
-            stat_items.append(f"nulls={null_pct}%")
-        if stats.get("distinct_count") is not None:
-            stat_items.append(f"distinct={stats['distinct_count']}")
-
-        if stat_items:
-            parts.append(f"stats: {', '.join(stat_items)}")
-
-        parts.append(f"file: {filename}")
-
-        return " | ".join(parts)
-
-    def _column_semantic_text(
-        self,
-        name: str,
-        normalized_name: str,
-        dtype: str,
-        sample_values: list[Any],
-        stats: dict[str, Any],
-    ) -> str:
-        examples = ", ".join(str(value) for value in sample_values[:6])
-        stats_text = ", ".join(f"{key}: {value}" for key, value in stats.items() if value not in (None, [], {}))
-        return (
-            f"Column {name}. Normalized label: {normalized_name}. "
-            f"Data type: {dtype}. Example values: {examples or 'no non-null examples available'}. "
-            f"Profile statistics: {stats_text or 'not available'}."
-        )
-
     @staticmethod
     def _broad_type(dtype: str) -> str:
-        """Map detailed DuckDB type to a broad category for payload indexing."""
         upper = dtype.upper()
         if any(m in upper for m in ("INT", "BIGINT", "SMALLINT", "TINYINT", "HUGEINT")):
             return "integer"

@@ -1,2 +1,0 @@
-"""Qdrant vector database integration."""
-

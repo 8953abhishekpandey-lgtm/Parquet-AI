@@ -1,2 +1,1 @@
-"""Semantic metadata generation."""
-
+"""Metadata package."""

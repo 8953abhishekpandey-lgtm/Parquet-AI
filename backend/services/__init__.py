@@ -1,2 +1,1 @@
-"""Backend service orchestration."""
-
+"""Services package."""

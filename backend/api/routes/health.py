@@ -1,46 +1,58 @@
-from fastapi import APIRouter
+"""
+Health Check Route — GET /api/health
 
-from backend.core.config import get_settings
-from backend.qdrant.vector_store import QdrantVectorStore
+Returns system health status including DuckDB connection,
+Anthropic API configuration, and file counts.
+"""
 
+import time
+from fastapi import APIRouter, Request
 
-router = APIRouter(tags=["health"])
+from backend.duckdb.connection import health_check as duckdb_health
+from backend.anthropic_client.client import api_health_check
+
+router = APIRouter()
 
 
 @router.get("/health")
-def health_check() -> dict:
-    settings = get_settings()
+async def health_check(request: Request):
+    """
+    System health check endpoint.
 
-    # Check Qdrant connection
-    qdrant_ok = False
+    Returns:
+        Health status for all subsystems.
+    """
+    start = time.time()
+
+    # DuckDB status
+    duckdb_status = duckdb_health()
+
+    # Anthropic API status
+    api_status = api_health_check()
+
+    # File count
+    file_count = 0
     try:
-        store = QdrantVectorStore()
-        qdrant_ok = store.is_connected()
+        file_registry = request.app.state.file_registry
+        file_count = file_registry.get_file_count()
     except Exception:
         pass
 
-    # DuckDB is always available (in-memory)
-    duckdb_ok = True
+    # Schema count
+    schema_count = 0
     try:
-        import duckdb
-        conn = duckdb.connect(":memory:")
-        conn.execute("SELECT 1").fetchone()
-        conn.close()
+        schema_store = request.app.state.schema_store
+        schema_count = len(schema_store.get_all_schemas())
     except Exception:
-        duckdb_ok = False
+        pass
 
-    # Claude availability
-    claude_available = bool(settings.anthropic_api_key and settings.enable_claude_reasoning)
+    elapsed = int((time.time() - start) * 1000)
 
     return {
-        "status": "ok" if (qdrant_ok and duckdb_ok) else "degraded",
-        "app": settings.app_name,
-        "embedding_model": settings.embedding_model,
-        "qdrant_mode": settings.qdrant_mode,
-        "qdrant_url": settings.qdrant_url,
-        "services": {
-            "qdrant": qdrant_ok,
-            "duckdb": duckdb_ok,
-            "claude": claude_available,
-        },
+        "status": "healthy" if duckdb_status["status"] == "healthy" else "degraded",
+        "response_time_ms": elapsed,
+        "duckdb": duckdb_status,
+        "anthropic_api": api_status,
+        "files_loaded": file_count,
+        "schemas_indexed": schema_count,
     }
