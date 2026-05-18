@@ -24,8 +24,6 @@ def get_connection() -> duckdb.DuckDBPyConnection:
     with _lock:
         if _connection is None:
             _connection = duckdb.connect(database=":memory:")
-            # Install and load extensions for broader format support
-            _connection.execute("INSTALL httpfs; LOAD httpfs;")
         return _connection
 
 

@@ -515,7 +515,7 @@ notepad .env
 Paste this into the file:
 ```
 ANTHROPIC_API_KEY=your_actual_api_key_here
-PRIMARY_MODEL=claude-haiku-20240307
+PRIMARY_MODEL=claude-haiku-4-5-20251001
 FALLBACK_MODEL=claude-sonnet-4-6
 MAX_CONTEXT_TOKENS=1500
 MAX_RESULT_ROWS=500
@@ -598,7 +598,7 @@ docker-compose down
 | Variable | What It Does | Default |
 |----------|-------------|---------|
 | `ANTHROPIC_API_KEY` | Your Anthropic API key — **required** | None |
-| `PRIMARY_MODEL` | AI model for SQL generation | `claude-haiku-20240307` |
+| `PRIMARY_MODEL` | AI model for SQL generation | `claude-haiku-4-5-20251001` |
 | `FALLBACK_MODEL` | AI model if primary fails | `claude-sonnet-4-6` |
 | `MAX_CONTEXT_TOKENS` | Max tokens sent to Claude per call | `1500` |
 | `MAX_RESULT_ROWS` | Max rows DuckDB returns | `500` |

@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 from backend.api.routes import upload, query, query_stream, schema, files, results, health
 from backend.duckdb.connection import get_connection, close_connection
@@ -35,16 +35,16 @@ async def lifespan(app: FastAPI):
 
     # Initialize DuckDB
     conn = get_connection()
-    print(f"✅ DuckDB initialized (in-memory)")
-    print(f"📂 Upload dir: {os.getenv('UPLOAD_DIR', './uploads')}")
-    print(f"📋 Metadata dir: {os.getenv('METADATA_DIR', './metadata')}")
-    print(f"🤖 Primary model: {os.getenv('PRIMARY_MODEL', 'claude-haiku-20240307')}")
+    print("[OK] DuckDB initialized (in-memory)")
+    print(f"[DIR] Upload dir: {os.getenv('UPLOAD_DIR', './uploads')}")
+    print(f"[DIR] Metadata dir: {os.getenv('METADATA_DIR', './metadata')}")
+    print(f"[AI] Primary model: {os.getenv('PRIMARY_MODEL', os.getenv('ANTHROPIC_MODEL', 'claude-haiku-4-5-20251001'))}")
 
     yield
 
     # Shutdown
     close_connection()
-    print("🛑 DuckDB connection closed")
+    print("[STOP] DuckDB connection closed")
 
 
 app = FastAPI(
@@ -54,8 +54,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS
-cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+# CORS — allow all localhost dev ports
+cors_origins = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:5173,http://localhost:5174,http://localhost:3000"
+).split(",")
+cors_origins = [o.strip() for o in cors_origins if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,

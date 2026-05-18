@@ -37,6 +37,35 @@ class ValidationResult:
         }
 
 
+def normalize_parquet_references(sql: str) -> str:
+    """
+    Normalize common DuckDB parquet shorthand into the required read_parquet() form.
+
+    DuckDB accepts FROM 'file.parquet', but the rest of this application expects
+    explicit read_parquet() calls so validation, file extraction, and debug output
+    all use the same shape.
+    """
+    if not sql:
+        return sql
+
+    normalized = re.sub(
+        r"read_parquet\s*\(\s*\"([^\"]+?\.parquet)\"\s*\)",
+        lambda match: f"read_parquet('{match.group(1)}')",
+        sql,
+        flags=re.IGNORECASE,
+    )
+
+    bare_parquet_ref = re.compile(
+        r"\b(FROM|JOIN)\s+(['\"])([^'\"]+?\.parquet)\2",
+        flags=re.IGNORECASE,
+    )
+
+    return bare_parquet_ref.sub(
+        lambda match: f"{match.group(1)} read_parquet('{match.group(3)}')",
+        normalized,
+    )
+
+
 def validate_sql(sql: str) -> ValidationResult:
     """
     Validate a SQL query for safety and correctness.

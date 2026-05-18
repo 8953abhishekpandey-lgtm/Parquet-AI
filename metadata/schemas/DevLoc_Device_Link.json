@@ -1,0 +1,81 @@
+{
+  "filename": "DevLoc_Device_Link.parquet",
+  "filepath": "D:\\MCP\\uploads\\DevLoc_Device_Link.parquet",
+  "row_count": 33934,
+  "col_count": 5,
+  "file_size_mb": 0.41,
+  "columns": [
+    {
+      "name": "ID",
+      "dtype": "BIGINT",
+      "null_pct": 0.0,
+      "unique_count": 33934,
+      "sample_values": [
+        6,
+        10,
+        214,
+        15,
+        116
+      ],
+      "min": 1,
+      "max": 33934
+    },
+    {
+      "name": "EquipmentId",
+      "dtype": "BIGINT",
+      "null_pct": 0.0,
+      "unique_count": 33933,
+      "sample_values": [
+        6,
+        10,
+        15,
+        18,
+        31
+      ],
+      "min": 1,
+      "max": 51159
+    },
+    {
+      "name": "DeviceLocationId",
+      "dtype": "BIGINT",
+      "null_pct": 0.0,
+      "unique_count": 33896,
+      "sample_values": [
+        1,
+        12,
+        314,
+        111,
+        311
+      ],
+      "min": 1,
+      "max": 33896
+    },
+    {
+      "name": "ValidFromDate",
+      "dtype": "TIMESTAMP",
+      "null_pct": 0.0,
+      "unique_count": 119,
+      "sample_values": [
+        "2024-04-06T00:00:00",
+        "2024-03-11T00:00:00",
+        "2024-03-12T00:00:00",
+        "2024-03-20T00:00:00",
+        "2024-04-12T00:00:00"
+      ],
+      "min": "2024-01-02T00:00:00",
+      "max": "2025-01-01T00:00:00"
+    },
+    {
+      "name": "ValidToDate",
+      "dtype": "TIMESTAMP",
+      "null_pct": 0.0,
+      "unique_count": 2,
+      "sample_values": [
+        "2024-06-25T00:00:00",
+        "9999-12-31T00:00:00"
+      ],
+      "min": "2024-06-25T00:00:00",
+      "max": "9999-12-31T00:00:00"
+    }
+  ]
+}

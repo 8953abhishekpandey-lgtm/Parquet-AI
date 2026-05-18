@@ -1,0 +1,65 @@
+{
+  "ID": [
+    "Consumer.parquet",
+    "ConsumerDevLocLink.parquet",
+    "DevLoc_Device_Link.parquet",
+    "Device_Location.parquet",
+    "Equipment.parquet",
+    "HES_MASTER.parquet",
+    "Material_Master.parquet"
+  ],
+  "Utility_ID": [
+    "Consumer.parquet",
+    "Device_Location.parquet",
+    "Equipment.parquet",
+    "Material_Master.parquet"
+  ],
+  "Alt_Utility_ID": [
+    "Consumer.parquet",
+    "Device_Location.parquet"
+  ],
+  "Utility_Office_Id": [
+    "Consumer.parquet",
+    "Device_Location.parquet"
+  ],
+  "Status": [
+    "Consumer.parquet",
+    "Equipment.parquet"
+  ],
+  "DeviceLocationId": [
+    "ConsumerDevLocLink.parquet",
+    "DevLoc_Device_Link.parquet"
+  ],
+  "ValidFromDate": [
+    "ConsumerDevLocLink.parquet",
+    "DevLoc_Device_Link.parquet"
+  ],
+  "ValidToDate": [
+    "ConsumerDevLocLink.parquet",
+    "DevLoc_Device_Link.parquet"
+  ],
+  "Changed_by": [
+    "ConsumerDevLocLink.parquet",
+    "Material_Master.parquet"
+  ],
+  "Description": [
+    "Device_Location.parquet",
+    "Material_Master.parquet"
+  ],
+  "Device_Type": [
+    "Equipment.parquet",
+    "Material_Master.parquet"
+  ],
+  "COMP_ID": [
+    "HES_MASTER.parquet",
+    "Material_Master.parquet"
+  ],
+  "IsActive": [
+    "HES_MASTER.parquet",
+    "Material_Master.parquet"
+  ],
+  "Data_Source": [
+    "HES_MASTER.parquet",
+    "Material_Master.parquet"
+  ]
+}

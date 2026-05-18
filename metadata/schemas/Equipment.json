@@ -1,0 +1,155 @@
+{
+  "filename": "Equipment.parquet",
+  "filepath": "D:\\MCP\\uploads\\Equipment.parquet",
+  "row_count": 51159,
+  "col_count": 11,
+  "file_size_mb": 0.65,
+  "columns": [
+    {
+      "name": "ID",
+      "dtype": "BIGINT",
+      "null_pct": 0.0,
+      "unique_count": 51159,
+      "sample_values": [
+        6,
+        10,
+        15,
+        18,
+        31
+      ],
+      "min": 1,
+      "max": 51159
+    },
+    {
+      "name": "Utility_ID",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 51158,
+      "sample_values": [
+        "T3000603",
+        "T3000707",
+        "T3000295",
+        "T3000647",
+        "T3000584"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Manufacturer_ID",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 3,
+      "sample_values": [
+        "Kimbal",
+        "Eppeltone",
+        "AMR"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Status",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 2,
+      "sample_values": [
+        "Installed",
+        "InStock"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Meter_ID",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 51158,
+      "sample_values": [
+        "CRYT3000130",
+        "CRYT3000593",
+        "CRYT3000035",
+        "CRYT3000467",
+        "CRYT3000434"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Device_Type",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "Meter"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Model_ID",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 3,
+      "sample_values": [
+        "A",
+        "NULL",
+        "B"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "StartDate",
+      "dtype": "DATE",
+      "null_pct": 0.0,
+      "unique_count": 62,
+      "sample_values": [
+        "2024-03-27",
+        "2024-04-03",
+        "2024-03-19",
+        "2024-04-15",
+        "2024-04-18"
+      ],
+      "min": "2022-10-31",
+      "max": "2024-05-15"
+    },
+    {
+      "name": "EndDate",
+      "dtype": "DATE",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "9999-12-31"
+      ],
+      "min": "9999-12-31",
+      "max": "9999-12-31"
+    },
+    {
+      "name": "Material_ID",
+      "dtype": "BIGINT",
+      "null_pct": 0.0,
+      "unique_count": 4,
+      "sample_values": [
+        20220001,
+        2000235540,
+        20240001,
+        5000001
+      ],
+      "min": 5000001,
+      "max": 2000235540
+    },
+    {
+      "name": "HES_ID",
+      "dtype": "BIGINT",
+      "null_pct": 0.0,
+      "unique_count": 2,
+      "sample_values": [
+        4,
+        2
+      ],
+      "min": 2,
+      "max": 4
+    }
+  ]
+}

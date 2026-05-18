@@ -11,12 +11,12 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Layout />}>
-          <Route index element={<Navigate to="/upload" replace />} />
+          <Route index element={<Navigate to="/query" replace />} />
           <Route path="upload" element={<UploadPage />} />
           <Route path="schema" element={<SchemaPage />} />
           <Route path="query" element={<QueryPage />} />
-          <Route path="debug" element={<DebugPage />} />
           <Route path="results" element={<ResultsPage />} />
+          <Route path="debug" element={<DebugPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

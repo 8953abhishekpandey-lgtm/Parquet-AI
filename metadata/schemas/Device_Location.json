@@ -1,0 +1,126 @@
+{
+  "filename": "Device_Location.parquet",
+  "filepath": "D:\\MCP\\uploads\\Device_Location.parquet",
+  "row_count": 33934,
+  "col_count": 9,
+  "file_size_mb": 0.8,
+  "columns": [
+    {
+      "name": "ID",
+      "dtype": "BIGINT",
+      "null_pct": 0.1,
+      "unique_count": 33896,
+      "sample_values": [
+        8,
+        9,
+        14,
+        20,
+        28
+      ],
+      "min": 1,
+      "max": 33896
+    },
+    {
+      "name": "Installation_Type",
+      "dtype": "VARCHAR",
+      "null_pct": 100.0,
+      "unique_count": 0,
+      "sample_values": [],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Utility_ID",
+      "dtype": "VARCHAR",
+      "null_pct": 0.1,
+      "unique_count": 33896,
+      "sample_values": [
+        "DT1183377589",
+        "DT1234432394",
+        "DT1290278125",
+        "DT7033206",
+        "DT1590904567"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Alt_Utility_ID",
+      "dtype": "VARCHAR",
+      "null_pct": 0.1,
+      "unique_count": 1,
+      "sample_values": [
+        "NULL"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Description",
+      "dtype": "VARCHAR",
+      "null_pct": 0.1,
+      "unique_count": 1,
+      "sample_values": [
+        "NULL"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Premise",
+      "dtype": "VARCHAR",
+      "null_pct": 0.1,
+      "unique_count": 1,
+      "sample_values": [
+        "NULL"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "GPS_LAT",
+      "dtype": "DOUBLE",
+      "null_pct": 15.2,
+      "unique_count": 27492,
+      "sample_values": [
+        21.37174603,
+        20.7302644,
+        21.2269902,
+        21.2269979,
+        20.5781
+      ],
+      "min": 1.0,
+      "max": 21.8428069
+    },
+    {
+      "name": "GPS_LONG",
+      "dtype": "DOUBLE",
+      "null_pct": 15.2,
+      "unique_count": 27349,
+      "sample_values": [
+        81.8120117,
+        81.8120061,
+        81.8747244,
+        81.796783,
+        82.2873067
+      ],
+      "min": 1.0,
+      "max": 83.1583405
+    },
+    {
+      "name": "Utility_Office_ID",
+      "dtype": "BIGINT",
+      "null_pct": 0.2,
+      "unique_count": 166,
+      "sample_values": [
+        515602,
+        515603,
+        516003,
+        516002,
+        516001
+      ],
+      "min": 1,
+      "max": 535416
+    }
+  ]
+}

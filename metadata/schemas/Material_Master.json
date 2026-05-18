@@ -1,0 +1,197 @@
+{
+  "filename": "Material_Master.parquet",
+  "filepath": "D:\\MCP\\uploads\\Material_Master.parquet",
+  "row_count": 4,
+  "col_count": 15,
+  "file_size_mb": 0.0,
+  "columns": [
+    {
+      "name": "ID",
+      "dtype": "BIGINT",
+      "null_pct": 0.0,
+      "unique_count": 4,
+      "sample_values": [
+        4,
+        1,
+        3,
+        2
+      ],
+      "min": 1,
+      "max": 4
+    },
+    {
+      "name": "Utility_ID",
+      "dtype": "BIGINT",
+      "null_pct": 0.0,
+      "unique_count": 4,
+      "sample_values": [
+        20240001,
+        5000001,
+        20220001,
+        2000235540
+      ],
+      "min": 5000001,
+      "max": 2000235540
+    },
+    {
+      "name": "Description",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 4,
+      "sample_values": [
+        "CSPDCL_Feeder_Meters",
+        "TPPPL_TEST_BENCH_SP",
+        "DT_Smart Meter",
+        "Single_Phase_SmartMeter"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Device_Type",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "Meter"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Meter_Type",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 2,
+      "sample_values": [
+        "Single_Phase",
+        "Three_Phase"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Functional_Class",
+      "dtype": "BIGINT",
+      "null_pct": 0.0,
+      "unique_count": 4,
+      "sample_values": [
+        4001,
+        1100,
+        9001,
+        3001
+      ],
+      "min": 1100,
+      "max": 9001
+    },
+    {
+      "name": "Data_Source",
+      "dtype": "BIGINT",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        2
+      ],
+      "min": 2,
+      "max": 2
+    },
+    {
+      "name": "COMP_ID",
+      "dtype": "BIGINT",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        1
+      ],
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "Inserted_By",
+      "dtype": "BIGINT",
+      "null_pct": 0.0,
+      "unique_count": 3,
+      "sample_values": [
+        5,
+        1,
+        2
+      ],
+      "min": 1,
+      "max": 5
+    },
+    {
+      "name": "Inserted_DATE",
+      "dtype": "TIMESTAMP",
+      "null_pct": 0.0,
+      "unique_count": 4,
+      "sample_values": [
+        "2024-03-05T16:31:00",
+        "2024-06-13T16:56:00",
+        "2024-07-19T18:05:00",
+        "2024-06-01T10:52:00"
+      ],
+      "min": "2024-03-05T16:31:00",
+      "max": "2024-07-19T18:05:00"
+    },
+    {
+      "name": "Changed_By",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 2,
+      "sample_values": [
+        "NULL",
+        "7"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Changed_Date",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 3,
+      "sample_values": [
+        "NULL",
+        "2024-07-31 12:05:00",
+        "2024-07-31 12:06:00"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "No_of_Channels",
+      "dtype": "BIGINT",
+      "null_pct": 0.0,
+      "unique_count": 2,
+      "sample_values": [
+        6,
+        10
+      ],
+      "min": 6,
+      "max": 10
+    },
+    {
+      "name": "IsActive",
+      "dtype": "BIGINT",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        1
+      ],
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "DIP",
+      "dtype": "BIGINT",
+      "null_pct": 0.0,
+      "unique_count": 2,
+      "sample_values": [
+        15,
+        30
+      ],
+      "min": 15,
+      "max": 30
+    }
+  ]
+}

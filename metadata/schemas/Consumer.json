@@ -1,0 +1,204 @@
+{
+  "filename": "Consumer.parquet",
+  "filepath": "D:\\MCP\\uploads\\Consumer.parquet",
+  "row_count": 31105,
+  "col_count": 17,
+  "file_size_mb": 0.32,
+  "columns": [
+    {
+      "name": "ID",
+      "dtype": "BIGINT",
+      "null_pct": 0.0,
+      "unique_count": 31105,
+      "sample_values": [
+        6,
+        10,
+        15,
+        18,
+        31
+      ],
+      "min": 1,
+      "max": 31105
+    },
+    {
+      "name": "Type",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "NULL"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Utility_ID",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 31105,
+      "sample_values": [
+        "DT3497455",
+        "DT9313175",
+        "DT1183935525",
+        "DT1222599412",
+        "DT9313773"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Alt_Utility_ID",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "NULL"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Cons_SEG",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "NULL"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "VIP",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "NULL"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Essential_Service",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "NULL"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "SALUTATION",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "NULL"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "FIRST_NAME",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "NULL"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "MIDDLE_NAME",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "NULL"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Address1",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "NULL"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Address2",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "NULL"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Pin",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "NULL"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "DISTRICT",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "NULL"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "REGION",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "NULL"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Utility_Office_Id",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "NULL"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "Status",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "NULL"
+      ],
+      "min": null,
+      "max": null
+    }
+  ]
+}

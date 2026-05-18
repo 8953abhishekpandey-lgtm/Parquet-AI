@@ -1,0 +1,136 @@
+{
+  "filename": "HES_MASTER.parquet",
+  "filepath": "D:\\MCP\\uploads\\HES_MASTER.parquet",
+  "row_count": 2,
+  "col_count": 11,
+  "file_size_mb": 0.0,
+  "columns": [
+    {
+      "name": "ID",
+      "dtype": "BIGINT",
+      "null_pct": 0.0,
+      "unique_count": 2,
+      "sample_values": [
+        4,
+        2
+      ],
+      "min": 2,
+      "max": 4
+    },
+    {
+      "name": "HES_CD",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 2,
+      "sample_values": [
+        "Radius",
+        "Cuculus-JIO"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "COMP_ID",
+      "dtype": "BIGINT",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        1
+      ],
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "HES_DESCRIPTION",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 2,
+      "sample_values": [
+        "RadiusHESforFeeders",
+        "Cuculus-JIO"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "IsActive",
+      "dtype": "BIGINT",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        1
+      ],
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "Data_Source",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 2,
+      "sample_values": [
+        "NULL",
+        "2"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "CreatedBy",
+      "dtype": "BIGINT",
+      "null_pct": 0.0,
+      "unique_count": 2,
+      "sample_values": [
+        1,
+        2
+      ],
+      "min": 1,
+      "max": 2
+    },
+    {
+      "name": "CreatedOn",
+      "dtype": "TIMESTAMP",
+      "null_pct": 0.0,
+      "unique_count": 2,
+      "sample_values": [
+        "2024-06-01T10:28:32.490000",
+        "2023-10-19T16:56:13.533000"
+      ],
+      "min": "2023-10-19T16:56:13.533000",
+      "max": "2024-06-01T10:28:32.490000"
+    },
+    {
+      "name": "ChangedBy",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "NULL"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "ChangedOn",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "NULL"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "name": "IsSmart",
+      "dtype": "VARCHAR",
+      "null_pct": 0.0,
+      "unique_count": 1,
+      "sample_values": [
+        "Y"
+      ],
+      "min": null,
+      "max": null
+    }
+  ]
+}

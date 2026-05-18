@@ -10,9 +10,40 @@ import os
 from anthropic import Anthropic
 
 # Model configuration
-PRIMARY_SQL_MODEL = os.getenv("PRIMARY_MODEL", "claude-haiku-20240307")
-PRIMARY_ANSWER_MODEL = os.getenv("PRIMARY_MODEL", "claude-haiku-20240307")
-FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "claude-sonnet-4-6")
+DEFAULT_PRIMARY_MODEL = "claude-haiku-4-5-20251001"
+DEFAULT_FALLBACK_MODEL = "claude-sonnet-4-6"
+MODEL_ALIASES = {
+    "claude-haiku-20240307": DEFAULT_PRIMARY_MODEL,
+    "claude-3-haiku-20240307": DEFAULT_PRIMARY_MODEL,
+    "claude-3-5-haiku-20241022": DEFAULT_PRIMARY_MODEL,
+    "claude-sonnet-4-20250514": DEFAULT_FALLBACK_MODEL,
+}
+
+
+def _configured_model(*env_names: str, default: str) -> str:
+    """Read a model setting and translate known legacy/invalid aliases."""
+    for env_name in env_names:
+        model = os.getenv(env_name, "").strip()
+        if model:
+            return MODEL_ALIASES.get(model, model)
+    return default
+
+
+PRIMARY_SQL_MODEL = _configured_model(
+    "PRIMARY_MODEL",
+    "ANTHROPIC_MODEL",
+    default=DEFAULT_PRIMARY_MODEL,
+)
+PRIMARY_ANSWER_MODEL = _configured_model(
+    "ANSWER_MODEL",
+    "PRIMARY_MODEL",
+    "ANTHROPIC_MODEL",
+    default=DEFAULT_PRIMARY_MODEL,
+)
+FALLBACK_MODEL = _configured_model(
+    "FALLBACK_MODEL",
+    default=DEFAULT_FALLBACK_MODEL,
+)
 
 _client: Anthropic | None = None
 
@@ -29,7 +60,7 @@ def get_client() -> Anthropic:
     """
     global _client
     if _client is None:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
+        api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
         if not api_key or api_key == "your_key_here":
             raise ValueError(
                 "ANTHROPIC_API_KEY is not set. "
@@ -84,7 +115,7 @@ def api_health_check() -> dict:
         Dictionary with API status info.
     """
     try:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
+        api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
         if not api_key or api_key == "your_key_here":
             return {
                 "status": "not_configured",

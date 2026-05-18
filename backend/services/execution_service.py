@@ -104,6 +104,7 @@ async def execute_query(
             "attempts_detail": [a.to_dict() for a in sql_result.attempts],
             "tokens_used": total_tokens,
             "pipeline_steps": pipeline_steps,
+            "context_tokens": token_count,
         }
 
     add_step(5, "Generating SQL (Claude)", "done",

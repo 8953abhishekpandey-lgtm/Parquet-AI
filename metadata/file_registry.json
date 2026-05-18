@@ -1,0 +1,81 @@
+{
+  "files": {
+    "Consumer.parquet": {
+      "filename": "Consumer.parquet",
+      "filepath": "D:\\MCP\\uploads\\Consumer.parquet",
+      "file_size_bytes": 335628,
+      "file_size_mb": 0.32,
+      "row_count": 31105,
+      "col_count": 17,
+      "status": "indexed",
+      "uploaded_at": "2026-05-18T05:47:58.087880+00:00",
+      "last_indexed_at": "2026-05-18T05:47:58.087893+00:00"
+    },
+    "ConsumerDevLocLink.parquet": {
+      "filename": "ConsumerDevLocLink.parquet",
+      "filepath": "D:\\MCP\\uploads\\ConsumerDevLocLink.parquet",
+      "file_size_bytes": 582558,
+      "file_size_mb": 0.56,
+      "row_count": 33896,
+      "col_count": 10,
+      "status": "indexed",
+      "uploaded_at": "2026-05-18T05:47:58.429483+00:00",
+      "last_indexed_at": "2026-05-18T05:47:58.429498+00:00"
+    },
+    "Device_Location.parquet": {
+      "filename": "Device_Location.parquet",
+      "filepath": "D:\\MCP\\uploads\\Device_Location.parquet",
+      "file_size_bytes": 835185,
+      "file_size_mb": 0.8,
+      "row_count": 33934,
+      "col_count": 9,
+      "status": "indexed",
+      "uploaded_at": "2026-05-18T05:47:58.816176+00:00",
+      "last_indexed_at": "2026-05-18T05:47:58.816247+00:00"
+    },
+    "DevLoc_Device_Link.parquet": {
+      "filename": "DevLoc_Device_Link.parquet",
+      "filepath": "D:\\MCP\\uploads\\DevLoc_Device_Link.parquet",
+      "file_size_bytes": 432536,
+      "file_size_mb": 0.41,
+      "row_count": 33934,
+      "col_count": 5,
+      "status": "indexed",
+      "uploaded_at": "2026-05-18T05:47:59.058970+00:00",
+      "last_indexed_at": "2026-05-18T05:47:59.058983+00:00"
+    },
+    "Equipment.parquet": {
+      "filename": "Equipment.parquet",
+      "filepath": "D:\\MCP\\uploads\\Equipment.parquet",
+      "file_size_bytes": 683931,
+      "file_size_mb": 0.65,
+      "row_count": 51159,
+      "col_count": 11,
+      "status": "indexed",
+      "uploaded_at": "2026-05-18T05:47:59.518353+00:00",
+      "last_indexed_at": "2026-05-18T05:47:59.518370+00:00"
+    },
+    "HES_MASTER.parquet": {
+      "filename": "HES_MASTER.parquet",
+      "filepath": "D:\\MCP\\uploads\\HES_MASTER.parquet",
+      "file_size_bytes": 1576,
+      "file_size_mb": 0.0,
+      "row_count": 2,
+      "col_count": 11,
+      "status": "indexed",
+      "uploaded_at": "2026-05-18T05:47:59.755159+00:00",
+      "last_indexed_at": "2026-05-18T05:47:59.755177+00:00"
+    },
+    "Material_Master.parquet": {
+      "filename": "Material_Master.parquet",
+      "filepath": "D:\\MCP\\uploads\\Material_Master.parquet",
+      "file_size_bytes": 2409,
+      "file_size_mb": 0.0,
+      "row_count": 4,
+      "col_count": 15,
+      "status": "indexed",
+      "uploaded_at": "2026-05-18T05:48:00.078800+00:00",
+      "last_indexed_at": "2026-05-18T05:48:00.078813+00:00"
+    }
+  }
+}

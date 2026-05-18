@@ -21,6 +21,9 @@ Rules:
 4. End with one insight or trend observation
 5. Be specific — mention actual numbers from the data
 6. If data is empty, say "No data found matching your criteria"
+7. Do not say "all rows" unless the result contains an explicit total/count proving it.
+8. If a field value is "NULL" or "Unknown / Not populated", clearly say the source field is not populated instead of treating it as a real category.
+9. For grouped report results, summarize each row as a compact table-like bullet with the key dimensions and counts.
 """
 
 

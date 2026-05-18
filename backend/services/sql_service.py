@@ -13,7 +13,7 @@ import time
 from typing import Any
 
 from backend.anthropic_client.sql_generator import generate_sql, fix_sql
-from backend.services.sql_validator import validate_sql
+from backend.services.sql_validator import normalize_parquet_references, validate_sql
 from backend.duckdb.executor import execute_sql, ExecutionResult
 
 MAX_SQL_RETRIES = int(os.getenv("MAX_SQL_RETRIES", "3"))
@@ -83,8 +83,12 @@ async def generate_and_execute(
 
         try:
             # Step 1: Generate or fix SQL
-            if attempt_num == 1:
-                sql, tokens = generate_sql(context, user_question)
+            if attempt_num == 1 or not last_sql.strip():
+                sql, tokens = generate_sql(
+                    context,
+                    user_question,
+                    use_fallback=attempt_num > 1,
+                )
             else:
                 # Use fallback model on last attempt
                 sql, tokens = fix_sql(
@@ -95,7 +99,9 @@ async def generate_and_execute(
                 )
 
             total_tokens += tokens
+            sql = normalize_parquet_references(sql)
             last_sql = sql
+            print(f"[SQL] Attempt {attempt_num} — Claude returned ({tokens} tokens):\n{sql[:200]}")
 
             # Step 2: Validate SQL
             validation = validate_sql(sql)
@@ -121,6 +127,23 @@ async def generate_and_execute(
 
                 if on_step:
                     await on_step(f"Attempt {attempt_num} execution error: {result.error}")
+                continue
+
+            if _should_retry_truncated_summary(user_question, sql, result):
+                error_msg = (
+                    "Grouped report returned too many rows and was truncated at the result cap. "
+                    "Rewrite as a compact summary with fewer GROUP BY dimensions. "
+                    "Do not group by unique IDs, meter IDs, raw GPS coordinates, exact timestamps, "
+                    "or other high-cardinality fields unless explicitly requested. "
+                    "For location reports, prefer utility office, area, region, district, or premise; "
+                    "aggregate coordinates with AVG/MIN/MAX/ROUND."
+                )
+                attempt = SQLAttempt(attempt_num, sql, error_msg, elapsed)
+                attempts.append(attempt)
+                last_error = error_msg
+
+                if on_step:
+                    await on_step(f"Attempt {attempt_num} produced a truncated grouped report; retrying with coarser aggregation.")
                 continue
 
             # Success!
@@ -152,9 +175,82 @@ async def generate_and_execute(
         execution_result=None,
         attempts=attempts,
         total_tokens=total_tokens,
-        error=(
-            "I could not generate a valid query for this question after "
-            f"{MAX_SQL_RETRIES} attempts. Please rephrase or check if "
-            "the relevant columns exist in your uploaded files."
-        ),
+        error=_build_failure_message(attempts),
+    )
+
+
+def _build_failure_message(attempts: list[SQLAttempt]) -> str:
+    """Return the most helpful user-facing error for the attempt history."""
+    model_errors = [
+        attempt.error for attempt in attempts
+        if attempt.error and _looks_like_model_not_found(attempt.error)
+    ]
+    if model_errors:
+        return (
+            "Claude rejected one of the configured model names. Check PRIMARY_MODEL "
+            "and FALLBACK_MODEL in .env, then retry the question."
+        )
+
+    api_errors = [
+        attempt.error for attempt in attempts
+        if attempt.error and _looks_like_api_error(attempt.error)
+    ]
+    if api_errors and len(api_errors) == len(attempts):
+        return (
+            "Claude API failed before a valid SQL query could be generated. "
+            "Check the API key, model names, and network/API status, then retry."
+        )
+
+    return (
+        "I could not generate a valid query for this question after "
+        f"{MAX_SQL_RETRIES} attempts. Please rephrase or check if "
+        "the relevant columns exist in your uploaded files."
+    )
+
+
+def _looks_like_model_not_found(error: str) -> bool:
+    error_lower = error.lower()
+    return "not_found_error" in error_lower and "model" in error_lower
+
+
+def _looks_like_api_error(error: str) -> bool:
+    error_lower = error.lower()
+    return (
+        "error code:" in error_lower
+        or "api" in error_lower
+        or "anthropic" in error_lower
+        or "request_id" in error_lower
+    )
+
+
+def _should_retry_truncated_summary(
+    user_question: str,
+    sql: str,
+    result: ExecutionResult,
+) -> bool:
+    """Return whether a truncated grouped result should be regenerated more compactly."""
+    if not result.truncated or "group by" not in sql.lower():
+        return False
+
+    question = user_question.lower()
+    summary_terms = (
+        "area",
+        "basis",
+        "breakdown",
+        "by ",
+        "group",
+        "location",
+        "report",
+        "summary",
+    )
+    raw_terms = (
+        "all data",
+        "all rows",
+        "every row",
+        "list all",
+        "raw",
+        "show all",
+    )
+    return any(term in question for term in summary_terms) and not any(
+        term in question for term in raw_terms
     )
